@@ -10,12 +10,12 @@ Built on top of `onnxruntime-node`, PaddleOCR.js handles all the complexity of m
 
 ## Key Features
 
-1. Lightweight: Optimized for performance with minimal dependencies
-2. Easy Integration: Simple API to detect and recognize text in images
-3. Cross-Platform: Works in Node.js and Bun environments
-4. Customizable: Support for custom models and dictionaries
-5. Pre-packed Models: Includes optimized PaddleOCR models ready for immediate use
-6. TypeScript Support: Full TypeScript definitions for enhanced developer experience
+1. **Lightweight**: Optimized for performance with minimal dependencies
+2. **Easy Integration**: Simple API to detect and recognize text in images
+3. **Cross-Platform**: Works in Node.js and Bun environments
+4. **Customizable**: Support for custom models and dictionaries
+5. **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use
+6. **TypeScript Support**: Full TypeScript definitions for enhanced developer experience
 
 ## Usage
 
