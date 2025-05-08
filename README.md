@@ -1,5 +1,7 @@
 # paddle-ocr.js
 
+A lightweight, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.
+
 ## Usage
 
 #### Basic usage
