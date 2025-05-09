@@ -5,4 +5,8 @@ const ocrService = await PaddleOcrService.getInstance({
   verbose: true,
 });
 
-console.log(ocrService.isInitialized());
+const imagePath = "./assets/receipt.jpg";
+const imgFile = Bun.file(imagePath);
+const fileBuffer = await imgFile.arrayBuffer();
+
+await ocrService.recognize(fileBuffer);
