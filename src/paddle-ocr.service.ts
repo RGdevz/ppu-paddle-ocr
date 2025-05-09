@@ -6,6 +6,7 @@ import {
   CanvasToolkit,
   Contours,
   createCanvas,
+  cv,
   ImageProcessor,
 } from "ppu-ocv";
 
@@ -328,20 +329,38 @@ class PaddleOcrService {
   }
 
   private postprocessDetection(
-    probMap: Float32Array,
+    detection: Float32Array,
     input: PreprocessDetectionResult,
-    minBoxAreaOnPadded: number = 100,
-    paddingRatio: number = 0.05
+    minBoxAreaOnPadded: number = 20,
+    paddingRatio: number = 0.6
   ): Box[] {
+    log(this.options.verbose, "Post-processing detection results...");
     const { width, height, resizeRatio, originalWidth, originalHeight } = input;
 
-    const outputMat = new cv.Mat(height, width, cv.CV_32FC1);
-    outputMat.data32F.set(probMap);
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
 
-    const processor = new ImageProcessor(outputMat);
-    processor
-      .threshold({ type: cv.THRESH_BINARY })
-      .convert({ rtype: cv.CV_8UC1 });
+    const imageData = ctx.createImageData(width, height);
+    const data = imageData.data;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const mapIndex = y * width + x;
+        const probability = detection[mapIndex] || 0;
+
+        const grayValue = Math.round(probability * 255);
+        const pixelStartIndex = (y * width + x) * 4;
+
+        data[pixelStartIndex + 0] = grayValue;
+        data[pixelStartIndex + 1] = grayValue;
+        data[pixelStartIndex + 2] = grayValue;
+        data[pixelStartIndex + 3] = 255;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    const processor = new ImageProcessor(canvas);
+    processor.grayscale().convert({ rtype: cv.CV_8UC1 });
 
     const contours = new Contours(processor.toMat(), {
       mode: cv.RETR_LIST,
@@ -350,7 +369,7 @@ class PaddleOcrService {
     const detectedBoxes: Box[] = [];
 
     contours.iterate((contour) => {
-      let rect = cv.boundingRect(contour);
+      let rect = contours.getRect(contour);
       if (rect.width * rect.height > minBoxAreaOnPadded) {
         const verticalPadding = Math.round(rect.height * paddingRatio);
         const horizontalPadding = Math.round(rect.height * paddingRatio * 2);
@@ -407,6 +426,11 @@ class PaddleOcrService {
       return a.y - b.y;
     });
 
+    log(
+      this.options.verbose,
+      `Found ${detectedBoxes.length} potential text boxes.`
+    );
+
     return detectedBoxes;
   }
 
@@ -440,7 +464,7 @@ class PaddleOcrService {
     const dir = "out";
     await CanvasToolkit.getInstance().saveImage({
       canvas,
-      filename: "detection-debug.png",
+      filename: "detection-debug",
       path: dir,
     });
 
@@ -448,6 +472,33 @@ class PaddleOcrService {
       this.options.verbose,
       `Probability map visualized and saved to: ${dir}`
     );
+  }
+
+  private async debugDetectedBoxes(image: ArrayBuffer, boxes: Box[]) {
+    const canvas = await ImageProcessor.prepareCanvas(image);
+    const ctx = canvas.getContext("2d");
+
+    const toolkit = CanvasToolkit.getInstance();
+
+    for (const box of boxes) {
+      const { x, y, width, height } = box;
+      toolkit.drawLine({
+        ctx,
+        x,
+        y,
+        width,
+        height,
+      });
+    }
+
+    const dir = "out";
+    await CanvasToolkit.getInstance().saveImage({
+      canvas,
+      filename: "boxes-debug",
+      path: dir,
+    });
+
+    log(this.options.verbose, `Boxes visualized and saved to: ${dir}`);
   }
 
   private static async preprocessRecognnition() {}
@@ -470,12 +521,11 @@ class PaddleOcrService {
       return false;
     }
 
+    const detectedBoxes = this.postprocessDetection(detection, input);
+
     // debug
     await this.debugDetectionCanvas(detection, input.width, input.height);
-
-    console.log("Post-processing detection results...");
-    const detectedBoxes = this.postprocessDetection(detection, input);
-    console.log(`Found ${detectedBoxes.length} potential text boxes.`);
+    await this.debugDetectedBoxes(image, detectedBoxes);
 
     const speed = Date.now() - startTime;
     log(this.options.verbose, `Operation completed in ${speed} ms`);
