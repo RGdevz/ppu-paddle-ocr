@@ -17,6 +17,7 @@ import {
   DET_MEAN,
   DET_STD,
   MAX_SIDE_LEN,
+  REC_IMG_HEIGHT,
 } from "./constants";
 
 import type {
@@ -24,7 +25,7 @@ import type {
   PaddleServiceOptions,
   PreprocessDetectionResult,
 } from "./interface";
-import { log } from "./util";
+import { PaddleOcrUtils } from "./paddle-utils.service";
 
 /**
  * PaddleOcrService - Provides OCR functionality using PaddleOCR models
@@ -32,7 +33,7 @@ import { log } from "./util";
  * This service can be used either as a singleton or as separate instances
  * depending on your application needs.
  */
-class PaddleOcrService {
+export class PaddleOcrService extends PaddleOcrUtils {
   private static instance: PaddleOcrService | null = null;
   private options: PaddleServiceOptions;
 
@@ -45,6 +46,8 @@ class PaddleOcrService {
    * @param options Optional configuration options
    */
   constructor(options?: PaddleServiceOptions) {
+    super({ verbose: options?.verbose || false });
+
     this.options = {
       detectionModelPath: DEFAULT_DETECTION_MODEL_PATH,
       recognitionModelPath: DEFAULT_RECOGNITION_MODEL_PATH,
@@ -80,21 +83,13 @@ class PaddleOcrService {
         effectiveOptions.dictionaryPath!
       );
 
-      log(
-        effectiveOptions.verbose,
-        `Loading Detection ONNX model from: ${resolvedDetectionPath}`
-      );
+      this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
 
       const detModelBuffer = readFileSync(resolvedDetectionPath).buffer;
       this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
 
-      log(
-        effectiveOptions.verbose,
-        `Detection ONNX model loaded successfully.`
-      );
-      log(
-        effectiveOptions.verbose,
-        `Loading Recognition ONNX model from: ${resolvedRecognitionPath}`
+      this.log(
+        `Detection ONNX model loaded successfully.\nLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
       );
 
       const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
@@ -102,17 +97,15 @@ class PaddleOcrService {
         recModelBuffer
       );
 
-      log(
-        effectiveOptions.verbose,
-        `Recognition ONNX model loaded successfully.`
+      this.log(
+        `Recognition ONNX model loaded successfully.\nLoading characters dictionary from: ${resolvedDictionaryPath}`
       );
 
       this.charactersDictionary = this.loadCharDictionary(
         resolvedDictionaryPath
       );
 
-      log(
-        effectiveOptions.verbose,
+      this.log(
         `Character dictionary loaded with ${this.charactersDictionary.length} entries.`
       );
     } catch (error) {
@@ -154,12 +147,32 @@ class PaddleOcrService {
     }
 
     const dictContent = readFileSync(filePath, "utf-8");
-    const lines = dictContent.split("\n").map((line) => line.trimEnd());
+    let lines = dictContent.split("\n").map((line) => line.trimEnd());
 
-    log(
-      this.options.verbose,
-      `Loaded ${lines.length} characters from dictionary.`
-    );
+    if (lines.length > 0 && lines[0] !== "") {
+    }
+
+    const spacePlaceholder = "<SPACE>";
+    const spacePlaceholderIndex = lines.indexOf(spacePlaceholder);
+
+    if (spacePlaceholderIndex !== -1) {
+      lines[spacePlaceholderIndex] = " ";
+    } else {
+      let foundActualSpace = false;
+
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i] === " ") {
+          foundActualSpace = true;
+          break;
+        }
+      }
+
+      if (!foundActualSpace) {
+        console.warn(
+          `WARNING: Space placeholder '${spacePlaceholder}' not found AND no actual space ' ' found (after index 0) in dictionary. Spaces may not be recognized.`
+        );
+      }
+    }
 
     return lines;
   }
@@ -271,8 +284,7 @@ class PaddleOcrService {
       }
     }
 
-    log(
-      this.options.verbose,
+    this.log(
       `Detection preprocessed: original(${initialCanvas.width}x${
         initialCanvas.height
       }), model_input(${width}x${height}), resize_ratio_to_padded_input: ${resizeRatio.toFixed(
@@ -303,13 +315,13 @@ class PaddleOcrService {
         inputWidth,
       ]);
 
-      log(this.options.verbose, "Running detection inference...");
+      this.log("Running detection inference...");
 
       const feeds = { x: inputOrtTensor };
       const results = await this.detectionSession!.run(feeds);
       const outputTensor = results["sigmoid_0.tmp_0"];
 
-      log(this.options.verbose, "Detection inference complete!");
+      this.log("Detection inference complete!");
 
       if (!outputTensor) {
         console.error(
@@ -334,30 +346,10 @@ class PaddleOcrService {
     minBoxAreaOnPadded: number = 20,
     paddingRatio: number = 0.6
   ): Box[] {
-    log(this.options.verbose, "Post-processing detection results...");
+    this.log("Post-processing detection results...");
+
     const { width, height, resizeRatio, originalWidth, originalHeight } = input;
-
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
-
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const mapIndex = y * width + x;
-        const probability = detection[mapIndex] || 0;
-
-        const grayValue = Math.round(probability * 255);
-        const pixelStartIndex = (y * width + x) * 4;
-
-        data[pixelStartIndex + 0] = grayValue;
-        data[pixelStartIndex + 1] = grayValue;
-        data[pixelStartIndex + 2] = grayValue;
-        data[pixelStartIndex + 3] = 255;
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
+    const canvas = this.tensorToCanvas(detection, width, height);
 
     const processor = new ImageProcessor(canvas);
     processor.grayscale().convert({ rtype: cv.CV_8UC1 });
@@ -426,19 +418,16 @@ class PaddleOcrService {
       return a.y - b.y;
     });
 
-    log(
-      this.options.verbose,
-      `Found ${detectedBoxes.length} potential text boxes.`
-    );
+    this.log(`Found ${detectedBoxes.length} potential text boxes.`);
 
     return detectedBoxes;
   }
 
-  private async debugDetectionCanvas(
-    detection: Float32Array,
+  private tensorToCanvas(
+    tensor: Float32Array,
     width: number,
     height: number
-  ): Promise<void> {
+  ): Canvas {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
@@ -448,7 +437,7 @@ class PaddleOcrService {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const mapIndex = y * width + x;
-        const probability = detection[mapIndex] || 0;
+        const probability = tensor[mapIndex] || 0;
 
         const grayValue = Math.round(probability * 255);
         const pixelStartIndex = (y * width + x) * 4;
@@ -461,6 +450,16 @@ class PaddleOcrService {
     }
     ctx.putImageData(imageData, 0, 0);
 
+    return canvas;
+  }
+
+  private async debugDetectionCanvas(
+    detection: Float32Array,
+    width: number,
+    height: number
+  ): Promise<void> {
+    const canvas = this.tensorToCanvas(detection, width, height);
+
     const dir = "out";
     await CanvasToolkit.getInstance().saveImage({
       canvas,
@@ -468,10 +467,7 @@ class PaddleOcrService {
       path: dir,
     });
 
-    log(
-      this.options.verbose,
-      `Probability map visualized and saved to: ${dir}`
-    );
+    this.log(`Probability map visualized and saved to: ${dir}`);
   }
 
   private async debugDetectedBoxes(image: ArrayBuffer, boxes: Box[]) {
@@ -498,16 +494,180 @@ class PaddleOcrService {
       path: dir,
     });
 
-    log(this.options.verbose, `Boxes visualized and saved to: ${dir}`);
+    this.log(`Boxes visualized and saved to: ${dir}`);
   }
 
-  private static async preprocessRecognnition() {}
+  private async preprocessRecognnition(
+    cropCanvas: Canvas,
+    targetHeight: number = REC_IMG_HEIGHT
+  ): Promise<{
+    imageTensor: Float32Array;
+    tensorWidth: number;
+    tensorHeight: number;
+  }> {
+    const processor = new ImageProcessor(cropCanvas);
 
-  private static async runRecognition() {}
+    const originalCropWidth = processor.width;
+    const originalCropHeight = processor.height;
 
-  public async recognize(image: ArrayBuffer): Promise<boolean> {
+    if (originalCropHeight === 0 || originalCropWidth === 0) {
+      throw new Error(
+        `Crop dimensions are zero: ${originalCropWidth}x${originalCropHeight}`
+      );
+    }
+
+    const aspectRatio = originalCropWidth / originalCropHeight;
+    let resizedWidth = Math.round(targetHeight * aspectRatio);
+    resizedWidth = Math.max(8, resizedWidth); // Ensure a minimum width (e.g., 8 pixels)
+
+    processor.resize({
+      width: resizedWidth,
+      height: targetHeight,
+    });
+
+    const finalCanvas = processor.toCanvas();
+    const finalCtx = finalCanvas.getContext("2d");
+    const imageData = finalCtx.getImageData(0, 0, resizedWidth, targetHeight);
+    const pixelData = imageData.data; // RGBA format
+
+    // --- MODIFICATION FOR 3 CHANNELS ---
+    const numChannels = 3; // Changed from 1 to 3
+    const imageTensor = new Float32Array(
+      numChannels * targetHeight * resizedWidth
+    ); // NCHW with N=1, C=3
+
+    for (let h = 0; h < targetHeight; h++) {
+      for (let w = 0; w < resizedWidth; w++) {
+        const r_idx = (h * resizedWidth + w) * 4;
+        const grayValue = pixelData[r_idx]!; // Assuming R, G, B are same for grayscale from canvas
+        const normalizedValue = (grayValue / 255.0 - 0.5) / 0.5;
+
+        // Triplicate the normalized grayscale value for R, G, B channels
+        imageTensor[0 * targetHeight * resizedWidth + h * resizedWidth + w] =
+          normalizedValue; // Channel 0 (R)
+        imageTensor[1 * targetHeight * resizedWidth + h * resizedWidth + w] =
+          normalizedValue; // Channel 1 (G)
+        imageTensor[2 * targetHeight * resizedWidth + h * resizedWidth + w] =
+          normalizedValue; // Channel 2 (B)
+      }
+    }
+    processor.destroy();
+    return {
+      imageTensor,
+      tensorWidth: resizedWidth,
+      tensorHeight: targetHeight,
+    };
+  }
+
+  private async runRecognition() {}
+
+  /**
+   * Performs greedy decoding on CTC model output logits.
+   *
+   * @param recOutputLogits - Raw logits from the recognition model
+   * @param sequenceLength - Length of the input sequence
+   * @param numClasses - Number of output classes
+   * @param charDict - Character dictionary for mapping indices to characters
+   * @returns Decoded text string
+   */
+  private ctcGreedyDecode(
+    recOutputLogits: Float32Array,
+    sequenceLength: number,
+    numClasses: number,
+    charDict: string[]
+  ): string {
+    const BLANK_INDEX = 0;
+    const UNK_TOKEN = "<unk>";
+
+    let decodedText = "";
+    let lastCharIndex = -1;
+
+    for (let t = 0; t < sequenceLength; t++) {
+      const maxProbResult = this.findMaxProbabilityClass(
+        recOutputLogits,
+        t,
+        numClasses
+      );
+      const predictedClassIndex = maxProbResult.index;
+
+      if (
+        predictedClassIndex === BLANK_INDEX ||
+        predictedClassIndex === lastCharIndex
+      ) {
+        lastCharIndex = predictedClassIndex;
+        continue;
+      }
+
+      if (this.isValidIndex(predictedClassIndex, charDict)) {
+        if (
+          predictedClassIndex === charDict.length - 1 &&
+          charDict[predictedClassIndex] === UNK_TOKEN
+        ) {
+          // Do nothing for unknown token
+        } else {
+          const isLastChar =
+            predictedClassIndex === this.charactersDictionary.length - 1;
+          decodedText += isLastChar ? " " : charDict[predictedClassIndex];
+        }
+      } else {
+        console.warn(
+          `Decoded predictedClassIndex ${predictedClassIndex} out of bounds for charDict (length ${charDict.length}) at t=${t}`
+        );
+      }
+
+      lastCharIndex = predictedClassIndex;
+    }
+
+    return decodedText;
+  }
+
+  /**
+   * Finds the class with maximum probability for a given timestep.
+   *
+   * @param logits - Raw logits from the recognition model
+   * @param timestep - Current timestep
+   * @param numClasses - Number of output classes
+   * @returns Object containing the max probability value and class index
+   */
+  private findMaxProbabilityClass(
+    logits: Float32Array,
+    timestep: number,
+    numClasses: number
+  ): { value: number; index: number } {
+    let maxProb = -Infinity;
+    let maxIndex = 0;
+
+    for (let c = 0; c < numClasses; c++) {
+      const prob = logits[timestep * numClasses + c];
+      if (prob > maxProb) {
+        maxProb = prob;
+        maxIndex = c;
+      }
+    }
+
+    return { value: maxProb, index: maxIndex };
+  }
+
+  /**
+   * Checks if the predicted class index is valid for the character dictionary.
+   *
+   * @param index - The predicted class index
+   * @param charDict - Character dictionary
+   * @returns Boolean indicating if the index is valid
+   */
+  private isValidIndex(index: number, charDict: string[]): boolean {
+    return index < charDict.length;
+  }
+
+  public async recognize(image: ArrayBuffer): Promise<
+    Array<{
+      text: string;
+      box: Box;
+    }>
+  > {
     const startTime = Date.now();
     await ImageProcessor.initRuntime();
+    const toolkit = CanvasToolkit.getInstance();
 
     const input = await this.prepocessDetection(image);
     const detection = await this.runDetection(
@@ -518,18 +678,110 @@ class PaddleOcrService {
 
     if (!detection) {
       console.error("Text detection failed (output map is null).");
-      return false;
+      return [];
     }
 
     const detectedBoxes = this.postprocessDetection(detection, input);
 
     // debug
-    await this.debugDetectionCanvas(detection, input.width, input.height);
-    await this.debugDetectedBoxes(image, detectedBoxes);
+    // await this.debugDetectionCanvas(detection, input.width, input.height);
+    // await this.debugDetectedBoxes(image, detectedBoxes);
+
+    const recognizedTexts: Array<{
+      text: string;
+      box: Box;
+    }> = [];
+
+    const cropsDebugPath = "./out/crops";
+    for (let i = 0; i < detectedBoxes.length; i++) {
+      const box = detectedBoxes[i];
+      if (box.width <= 0 || box.height <= 0) {
+        console.warn(
+          `Skipping invalid box ${i + 1}: w=${box.width}, h=${box.height}`
+        );
+        continue;
+      }
+
+      const sourceCanvasForCrop = await ImageProcessor.prepareCanvas(image);
+      const cropCanvas = toolkit.crop({
+        bbox: {
+          x0: box.x,
+          y0: box.y,
+          x1: box.x + box.width,
+          y1: box.y + box.height,
+        },
+        canvas: sourceCanvasForCrop,
+      });
+
+      // await toolkit.saveImage({
+      //   canvas: cropCanvas,
+      //   filename: `crop_${String(i).padStart(3, "0")}.png`,
+      //   path: cropsDebugPath,
+      // });
+
+      try {
+        const {
+          imageTensor: recInputTensor,
+          tensorWidth: recTensorWidth,
+          tensorHeight: recTensorHeight,
+        } = await this.preprocessRecognnition(cropCanvas);
+
+        const recInputOrtTensor = new ort.Tensor("float32", recInputTensor, [
+          1,
+          3,
+          recTensorHeight,
+          recTensorWidth,
+        ]);
+        const recFeeds = { x: recInputOrtTensor };
+
+        // this.log(
+        //   `Running recognition for box ${
+        //     i + 1
+        //   }, tensor shape: [1,1,${recTensorHeight},${recTensorWidth}]`
+        // );
+        const recResults = await this.recognitionSession!.run(recFeeds);
+
+        const recOutputNodeName = Object.keys(recResults)[0];
+        const recOutputTensor = recResults[recOutputNodeName];
+
+        if (!recOutputTensor) {
+          console.error(
+            `Recognition output tensor '${recOutputNodeName}' not found for box ${
+              i + 1
+            }. Available keys: ${Object.keys(recResults)}`
+          );
+          continue;
+        }
+
+        const recOutputData = recOutputTensor.data as Float32Array;
+        const recOutputShape = recOutputTensor.dims;
+
+        const sequenceLength = recOutputShape[1];
+        const numClasses = recOutputShape[2];
+
+        if (numClasses !== this.charactersDictionary.length) {
+          console.warn(
+            `Warning: Rec model output numClasses (${numClasses}) does not match charactersDictionary length (${this.charactersDictionary.length}). Decoding might be incorrect.`
+          );
+        }
+
+        const text = this.ctcGreedyDecode(
+          recOutputData,
+          sequenceLength,
+          numClasses,
+          this.charactersDictionary
+        );
+        // console.log(`  Recognized Box ${i + 1}: "${text}"`);
+        recognizedTexts.push({ text, box });
+      } catch (e: any) {
+        console.error(`Error processing box ${i + 1}: ${e.message}`, e.stack);
+      }
+    }
 
     const speed = Date.now() - startTime;
-    log(this.options.verbose, `Operation completed in ${speed} ms`);
-    return true;
+    this.log(`Operation completed in ${speed} ms`);
+
+    return recognizedTexts;
   }
 }
 

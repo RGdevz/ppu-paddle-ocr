@@ -8,6 +8,10 @@ export interface PaddleServiceOptions {
   verbose?: boolean;
 }
 
+export interface PaddleUtilsOptions {
+  verbose: boolean;
+}
+
 export interface PreprocessDetectionResult {
   tensor: Float32Array<ArrayBufferLike>;
   width: number;

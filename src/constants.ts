@@ -19,3 +19,5 @@ export const DEFAULT_EN_DICT_PATH: string = path.join(
 export const MAX_SIDE_LEN = 960;
 export const DET_MEAN: [number, number, number] = [0.485, 0.456, 0.406];
 export const DET_STD: [number, number, number] = [0.229, 0.224, 0.225];
+
+export const REC_IMG_HEIGHT = 48;
