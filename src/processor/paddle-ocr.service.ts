@@ -132,6 +132,7 @@ export class PaddleOcrService {
       PaddleOcrService.instance = new PaddleOcrService(options);
       await PaddleOcrService.instance.initialize();
     } else {
+      await PaddleOcrService.instance.destroy();
       await PaddleOcrService.instance.initialize(options);
     }
 

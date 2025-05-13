@@ -23,7 +23,10 @@ Built on top of `onnxruntime-node`, PaddleOCR.js handles all the complexity of m
 
 ```ts
 const ocrService = await PaddleOcrService.getInstance({
-  verbose: true,
+  debugging: {
+    debug: false,
+    verbose: true,
+  },
 });
 ```
 
@@ -31,9 +34,10 @@ const ocrService = await PaddleOcrService.getInstance({
 
 ```ts
 const customService = await PaddleOcrService.createInstance({
-  detectionModelPath: "./models/custom-det.onnx",
-  recognitionModelPath: "./models/custom-rec.onnx",
-  verbose: true,
+  model: {
+    detection: "./models/custom-det.onnx",
+    recoginition: "./models/custom-rec.onnx",
+  },
 });
 ```
 
@@ -41,7 +45,9 @@ const customService = await PaddleOcrService.createInstance({
 
 ```ts
 await PaddleOcrService.changeModel({
-  detectionModelPath: "./models/new-model.onnx",
-  verbose: true,
+  model: {
+    detection: "./models/custom-det.onnx",
+    recoginition: "./models/custom-rec.onnx",
+  },
 });
 ```
