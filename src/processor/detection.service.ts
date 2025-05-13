@@ -1,9 +1,16 @@
 import * as ort from "onnxruntime-node";
 import { Canvas, Contours, createCanvas, ImageProcessor } from "ppu-ocv";
+import {
+  DEFAULT_DEBUGGING_OPTIONS,
+  DEFAULT_DETECTION_OPTIONS,
+} from "../constants";
 import type { Box, DebuggingOptions, DetectionOptions } from "../interface";
 
+/**
+ * Result of preprocessing an image for text detection
+ */
 export interface PreprocessDetectionResult {
-  tensor: Float32Array<ArrayBufferLike>;
+  tensor: Float32Array;
   width: number;
   height: number;
   resizeRatio: number;
@@ -11,128 +18,111 @@ export interface PreprocessDetectionResult {
   originalHeight: number;
 }
 
+/**
+ * Service for detecting text regions in images
+ */
 export class DetectionService {
-  private options: DetectionOptions;
-  private debugging: DebuggingOptions;
-  private session: ort.InferenceSession;
+  private readonly options: DetectionOptions;
+  private readonly debugging: DebuggingOptions;
+  private readonly session: ort.InferenceSession;
+
+  private static readonly NUM_CHANNELS = 3;
 
   constructor(
     session: ort.InferenceSession,
-    options?: DetectionOptions,
-    debugging?: DebuggingOptions
+    options: Partial<DetectionOptions> = {},
+    debugging: Partial<DebuggingOptions> = {}
   ) {
     this.session = session;
 
     this.options = {
+      ...DEFAULT_DETECTION_OPTIONS,
       ...options,
     };
 
     this.debugging = {
+      ...DEFAULT_DEBUGGING_OPTIONS,
       ...debugging,
     };
   }
 
-  protected log(text: string): void {
+  /**
+   * Logs a message if verbose debugging is enabled
+   */
+  private log(message: string): void {
     if (this.debugging.verbose) {
-      console.log(text);
+      console.log(`[DetectionService] ${message}`);
     }
   }
 
+  /**
+   * Main method to run text detection on an image
+   */
   async run(image: ArrayBuffer): Promise<Box[]> {
-    const input = await this.prepocessDetection(image);
-    const detection = await this.runDetection(
-      input.tensor,
-      input.width,
-      input.height
-    );
+    this.log("Starting text detection process");
 
-    if (!detection) {
-      console.error("Text detection failed (output map is null).");
+    try {
+      const input = await this.prepocessDetection(image);
+      const detection = await this.runInference(
+        input.tensor,
+        input.width,
+        input.height
+      );
+
+      if (!detection) {
+        console.error("Text detection failed (output tensor is null)");
+        return [];
+      }
+
+      return this.postprocessDetection(detection, input);
+    } catch (error) {
+      console.error(
+        "Error during text detection:",
+        error instanceof Error ? error.message : String(error)
+      );
       return [];
     }
-
-    const detectedBoxes = this.postprocessDetection(detection, input);
-    return detectedBoxes;
   }
 
+  /**
+   * Preprocess an image for text detection
+   */
   private async prepocessDetection(
     image: ArrayBuffer
   ): Promise<PreprocessDetectionResult> {
     const initialCanvas = await ImageProcessor.prepareCanvas(image);
-    const MAX_SIDE_LEN = this.options.maxSideLength!;
+    const { width: originalWidth, height: originalHeight } = initialCanvas;
 
-    let resizeW = initialCanvas.width;
-    let resizeH = initialCanvas.height;
-    let resizeRatio = 1.0;
-
-    if (Math.max(resizeH, resizeW) > MAX_SIDE_LEN) {
-      if (resizeH > resizeW) {
-        resizeRatio = MAX_SIDE_LEN / resizeH;
-      } else {
-        resizeRatio = MAX_SIDE_LEN / resizeW;
-      }
-    }
-
-    resizeW = Math.round(resizeW * resizeRatio);
-    resizeH = Math.round(resizeH * resizeRatio);
+    const {
+      width: resizeW,
+      height: resizeH,
+      ratio: resizeRatio,
+    } = this.calculateResizeDimensions(originalWidth, originalHeight);
 
     const processor = new ImageProcessor(initialCanvas);
-    const resizedCanvas: Canvas = processor
-      .resize({
-        width: resizeW,
-        height: resizeH,
-      })
+    const resizedCanvas = processor
+      .resize({ width: resizeW, height: resizeH })
       .toCanvas();
-
     processor.destroy();
 
     const width = Math.ceil(resizeW / 32) * 32;
     const height = Math.ceil(resizeH / 32) * 32;
 
-    const paddedCanvas = createCanvas(width, height);
-    const paddedCtx = paddedCanvas.getContext("2d");
-    paddedCtx.drawImage(resizedCanvas, 0, 0, resizeW, resizeH);
-
-    const imageDataFromPaddedCanvas = paddedCtx.getImageData(
-      0,
-      0,
+    const paddedCanvas = this.createPaddedCanvas(
+      resizedCanvas,
+      resizeW,
+      resizeH,
       width,
       height
     );
 
-    const rgbaPaddedData = imageDataFromPaddedCanvas.data;
-
-    const numChannels = 3;
-    const tensor = new Float32Array(numChannels * height * width);
-    const DET_MEAN = this.options.mean!;
-    const DET_STD = this.options.stdDeviation!;
-
-    for (let h = 0; h < height; h++) {
-      for (let w = 0; w < width; w++) {
-        const R_idx_in_rgba = (h * width + w) * 4 + 0;
-        const G_idx_in_rgba = (h * width + w) * 4 + 1;
-        const B_idx_in_rgba = (h * width + w) * 4 + 2;
-
-        let r = rgbaPaddedData[R_idx_in_rgba]! / 255.0;
-        let g = rgbaPaddedData[G_idx_in_rgba]! / 255.0;
-        let b = rgbaPaddedData[B_idx_in_rgba]! / 255.0;
-
-        r = (r - DET_MEAN[0]) / DET_STD[0];
-        g = (g - DET_MEAN[1]) / DET_STD[1];
-        b = (b - DET_MEAN[2]) / DET_STD[2];
-
-        tensor[0 * height * width + h * width + w] = r;
-        tensor[1 * height * width + h * width + w] = g;
-        tensor[2 * height * width + h * width + w] = b;
-      }
-    }
+    const tensor = this.imageToTensor(paddedCanvas, width, height);
 
     this.log(
-      `Detection preprocessed: original(${initialCanvas.width}x${
-        initialCanvas.height
-      }), model_input(${width}x${height}), resize_ratio_to_padded_input: ${resizeRatio.toFixed(
-        4
-      )}`
+      `Detection preprocessed: original(${originalWidth}x${originalHeight}), ` +
+        `model_input(${width}x${height}), resize_ratio: ${resizeRatio.toFixed(
+          4
+        )}`
     );
 
     return {
@@ -140,27 +130,101 @@ export class DetectionService {
       width,
       height,
       resizeRatio,
-      originalWidth: initialCanvas.width,
-      originalHeight: initialCanvas.height,
+      originalWidth,
+      originalHeight,
     };
   }
 
-  private async runDetection(
+  /**
+   * Calculate dimensions for resizing the image
+   */
+  private calculateResizeDimensions(
+    originalWidth: number,
+    originalHeight: number
+  ) {
+    const MAX_SIDE_LEN = this.options.maxSideLength!;
+
+    let resizeW = originalWidth;
+    let resizeH = originalHeight;
+    let ratio = 1.0;
+
+    if (Math.max(resizeH, resizeW) > MAX_SIDE_LEN) {
+      ratio = MAX_SIDE_LEN / (resizeH > resizeW ? resizeH : resizeW);
+      resizeW = Math.round(resizeW * ratio);
+      resizeH = Math.round(resizeH * ratio);
+    }
+
+    return { width: resizeW, height: resizeH, ratio };
+  }
+
+  /**
+   * Create a padded canvas from the resized image
+   */
+  private createPaddedCanvas(
+    resizedCanvas: Canvas,
+    resizeW: number,
+    resizeH: number,
+    targetWidth: number,
+    targetHeight: number
+  ): Canvas {
+    const paddedCanvas = createCanvas(targetWidth, targetHeight);
+    const paddedCtx = paddedCanvas.getContext("2d");
+    paddedCtx.drawImage(resizedCanvas, 0, 0, resizeW, resizeH);
+    return paddedCanvas;
+  }
+
+  /**
+   * Convert an image to a normalized tensor for model input
+   */
+  private imageToTensor(
+    canvas: Canvas,
+    width: number,
+    height: number
+  ): Float32Array {
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const rgbaData = imageData.data;
+
+    const tensor = new Float32Array(
+      DetectionService.NUM_CHANNELS * height * width
+    );
+    const { mean, stdDeviation } = this.options;
+
+    for (let h = 0; h < height; h++) {
+      for (let w = 0; w < width; w++) {
+        const rgbaIdx = (h * width + w) * 4;
+        const tensorBaseIdx = h * width + w;
+
+        // Normalize RGB values
+        for (let c = 0; c < DetectionService.NUM_CHANNELS; c++) {
+          const pixelValue = rgbaData[rgbaIdx + c]! / 255.0;
+          const normalizedValue = (pixelValue - mean![c]) / stdDeviation![c];
+          tensor[c * height * width + tensorBaseIdx] = normalizedValue;
+        }
+      }
+    }
+
+    return tensor;
+  }
+
+  /**
+   * Run the detection model inference
+   */
+  private async runInference(
     tensor: Float32Array,
-    inputWidth: number,
-    inputHeight: number
+    width: number,
+    height: number
   ): Promise<Float32Array | null> {
     try {
-      const inputOrtTensor = new ort.Tensor("float32", tensor, [
-        1,
-        3,
-        inputHeight,
-        inputWidth,
-      ]);
-
       this.log("Running detection inference...");
 
-      const feeds = { x: inputOrtTensor };
+      const inputTensor = new ort.Tensor("float32", tensor, [
+        1,
+        3,
+        height,
+        width,
+      ]);
+      const feeds = { x: inputTensor };
       const results = await this.session.run(feeds);
       const outputTensor = results["sigmoid_0.tmp_0"];
 
@@ -168,7 +232,7 @@ export class DetectionService {
 
       if (!outputTensor) {
         console.error(
-          "Output tensor 'sigmoid_0.tmp_0' not found in det results."
+          "Output tensor 'sigmoid_0.tmp_0' not found in detection results"
         );
         return null;
       }
@@ -176,13 +240,16 @@ export class DetectionService {
       return outputTensor.data as Float32Array;
     } catch (error) {
       console.error(
-        "Error in detectText:",
+        "Error during model inference:",
         error instanceof Error ? error.message : String(error)
       );
       throw error;
     }
   }
 
+  /**
+   * Convert a tensor to a canvas for visualization and processing
+   */
   private tensorToCanvas(
     tensor: Float32Array,
     width: number,
@@ -190,7 +257,6 @@ export class DetectionService {
   ): Canvas {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
-
     const imageData = ctx.createImageData(width, height);
     const data = imageData.data;
 
@@ -198,26 +264,28 @@ export class DetectionService {
       for (let x = 0; x < width; x++) {
         const mapIndex = y * width + x;
         const probability = tensor[mapIndex] || 0;
-
         const grayValue = Math.round(probability * 255);
-        const pixelStartIndex = (y * width + x) * 4;
 
-        data[pixelStartIndex + 0] = grayValue;
-        data[pixelStartIndex + 1] = grayValue;
-        data[pixelStartIndex + 2] = grayValue;
-        data[pixelStartIndex + 3] = 255;
+        const pixelIdx = (y * width + x) * 4;
+        data[pixelIdx] = grayValue; // R
+        data[pixelIdx + 1] = grayValue; // G
+        data[pixelIdx + 2] = grayValue; // B
+        data[pixelIdx + 3] = 255; // A
       }
     }
-    ctx.putImageData(imageData, 0, 0);
 
+    ctx.putImageData(imageData, 0, 0);
     return canvas;
   }
 
+  /**
+   * Process detection results to extract bounding boxes
+   */
   private postprocessDetection(
     detection: Float32Array,
     input: PreprocessDetectionResult,
-    minBoxAreaOnPadded: number = 20,
-    paddingRatio: number = 0.6
+    minBoxAreaOnPadded: number = this.options.minimumAreaThreshold || 20,
+    paddingRatio: number = this.options.paddingRatio || 0.6
   ): Box[] {
     this.log("Post-processing detection results...");
 
@@ -231,72 +299,145 @@ export class DetectionService {
       mode: cv.RETR_LIST,
       method: cv.CHAIN_APPROX_SIMPLE,
     });
-    const detectedBoxes: Box[] = [];
 
-    contours.iterate((contour) => {
-      let rect = contours.getRect(contour);
-      if (rect.width * rect.height > minBoxAreaOnPadded) {
-        const verticalPadding = Math.round(rect.height * paddingRatio);
-        const horizontalPadding = Math.round(rect.height * paddingRatio * 2);
-
-        let paddedRectX = rect.x - horizontalPadding;
-        let paddedRectY = rect.y - verticalPadding;
-        let paddedRectWidth = rect.width + 2 * horizontalPadding;
-        let paddedRectHeight = rect.height + 2 * verticalPadding;
-
-        paddedRectX = Math.max(0, paddedRectX);
-        paddedRectY = Math.max(0, paddedRectY);
-        paddedRectWidth =
-          rect.x - paddedRectX + paddedRectWidth - (rect.x - paddedRectX);
-        paddedRectHeight =
-          rect.y - paddedRectY + paddedRectHeight - (rect.y - paddedRectY);
-
-        paddedRectWidth = Math.min(width - paddedRectX, paddedRectWidth);
-        paddedRectHeight = Math.min(height - paddedRectY, paddedRectHeight);
-
-        const originalX = paddedRectX / resizeRatio;
-        const originalY = paddedRectY / resizeRatio;
-        const originalWidthBox = paddedRectWidth / resizeRatio;
-        const originalHeightBox = paddedRectHeight / resizeRatio;
-
-        const finalX = Math.max(0, Math.round(originalX));
-        const finalY = Math.max(0, Math.round(originalY));
-        const finalWidth = Math.min(
-          originalWidth - finalX,
-          Math.round(originalWidthBox)
-        );
-        const finalHeight = Math.min(
-          originalHeight - finalY,
-          Math.round(originalHeightBox)
-        );
-
-        if (finalWidth > 5 && finalHeight > 5) {
-          detectedBoxes.push({
-            x: finalX,
-            y: finalY,
-            width: finalWidth,
-            height: finalHeight,
-          });
-        }
-      }
-    });
+    const boxes = this.extractBoxesFromContours(
+      contours,
+      width,
+      height,
+      resizeRatio,
+      originalWidth,
+      originalHeight,
+      minBoxAreaOnPadded,
+      paddingRatio
+    );
 
     processor.destroy();
     contours.destroy();
 
-    detectedBoxes.sort((a, b) => {
-      if (Math.abs(a.y - b.y) < (a.height + b.height) / 4) {
-        return a.x - b.x;
-      }
-      return a.y - b.y;
-    });
+    const sortedBoxes = this.sortBoxesByReadingOrder(boxes);
 
-    this.log(`Found ${detectedBoxes.length} potential text boxes.`);
-
-    return detectedBoxes;
+    this.log(`Found ${sortedBoxes.length} potential text boxes`);
+    return sortedBoxes;
   }
 
+  /**
+   * Extract boxes from contours
+   */
+  private extractBoxesFromContours(
+    contours: Contours,
+    width: number,
+    height: number,
+    resizeRatio: number,
+    originalWidth: number,
+    originalHeight: number,
+    minBoxArea: number,
+    paddingRatio: number
+  ): Box[] {
+    const boxes: Box[] = [];
+
+    contours.iterate((contour) => {
+      const rect = contours.getRect(contour);
+
+      if (rect.width * rect.height <= minBoxArea) {
+        return;
+      }
+
+      const paddedRect = this.applyPaddingToRect(
+        rect,
+        width,
+        height,
+        paddingRatio
+      );
+
+      const finalBox = this.convertToOriginalCoordinates(
+        paddedRect,
+        resizeRatio,
+        originalWidth,
+        originalHeight
+      );
+
+      if (finalBox.width > 5 && finalBox.height > 5) {
+        boxes.push(finalBox);
+      }
+    });
+
+    return boxes;
+  }
+
+  /**
+   * Apply padding to a rectangle
+   */
+  private applyPaddingToRect(
+    rect: { x: number; y: number; width: number; height: number },
+    maxWidth: number,
+    maxHeight: number,
+    paddingRatio: number
+  ) {
+    const verticalPadding = Math.round(rect.height * paddingRatio);
+    const horizontalPadding = Math.round(rect.height * paddingRatio * 2);
+
+    let x = rect.x - horizontalPadding;
+    let y = rect.y - verticalPadding;
+    let width = rect.width + 2 * horizontalPadding;
+    let height = rect.height + 2 * verticalPadding;
+
+    x = Math.max(0, x);
+    y = Math.max(0, y);
+
+    const rightEdge = Math.min(
+      maxWidth,
+      rect.x + rect.width + horizontalPadding
+    );
+    const bottomEdge = Math.min(
+      maxHeight,
+      rect.y + rect.height + verticalPadding
+    );
+    width = rightEdge - x;
+    height = bottomEdge - y;
+
+    return { x, y, width, height };
+  }
+
+  /**
+   * Convert coordinates from resized image back to original image
+   */
+  private convertToOriginalCoordinates(
+    rect: { x: number; y: number; width: number; height: number },
+    resizeRatio: number,
+    originalWidth: number,
+    originalHeight: number
+  ): Box {
+    const scaledX = rect.x / resizeRatio;
+    const scaledY = rect.y / resizeRatio;
+    const scaledWidth = rect.width / resizeRatio;
+    const scaledHeight = rect.height / resizeRatio;
+
+    const x = Math.max(0, Math.round(scaledX));
+    const y = Math.max(0, Math.round(scaledY));
+    const width = Math.min(originalWidth - x, Math.round(scaledWidth));
+    const height = Math.min(originalHeight - y, Math.round(scaledHeight));
+
+    return { x, y, width, height };
+  }
+
+  /**
+   * Sort boxes by reading order (top to bottom, left to right)
+   */
+  private sortBoxesByReadingOrder(boxes: Box[]): Box[] {
+    return [...boxes].sort((a, b) => {
+      // If boxes are roughly on the same line (within 1/4 of their combined heights)
+      if (Math.abs(a.y - b.y) < (a.height + b.height) / 4) {
+        return a.x - b.x; // Sort left to right
+      }
+      return a.y - b.y; // Otherwise sort top to bottom
+    });
+  }
+
+  /**
+   * Release resources
+   */
   async destroy(): Promise<void> {
     await this.session.release();
+    this.log("Detection service resources released");
   }
 }
