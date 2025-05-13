@@ -92,6 +92,15 @@ await PaddleOcrService.changeModel({
 
 See: [Example usage](./examples)
 
+## Models
+
+This project default onnx models uses PaddleOCR v3 models as follow:
+
+- detection: `en_PP-OCRv3_det_infer.onnx`
+- recogniton: `en_PP-OCRv3_rec_infer.onnx`
+
+Read more: https://paddlepaddle.github.io/PaddleOCR/main/en/ppocr/model_list.html#22-english-recognition-model
+
 ## Configuration
 
 All options are grouped under the PaddleOptions interface:
