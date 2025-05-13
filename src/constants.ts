@@ -7,13 +7,26 @@ import type {
   RecognitionOptions,
 } from "./interface";
 
+import { fileURLToPath } from "url";
+
+const getCurrentDirPath = () => {
+  if (typeof import.meta !== "undefined" && import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    return path.dirname(__filename);
+  }
+  return __dirname;
+};
+
+const PACKAGE_ROOT = getCurrentDirPath();
+
 export const DEFAULT_DETECTION_MODEL_PATH: string = path.join(
-  __dirname,
+  PACKAGE_ROOT,
   "models",
   "en_PP-OCRv3_det_infer.onnx"
 );
+
 export const DEFAULT_RECOGNITION_MODEL_PATH: string = path.join(
-  __dirname,
+  PACKAGE_ROOT,
   "models",
   "en_PP-OCRv3_rec_infer.onnx"
 );
