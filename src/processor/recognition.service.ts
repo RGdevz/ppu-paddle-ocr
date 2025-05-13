@@ -99,6 +99,10 @@ export class RecognitionService {
     boxData: Array<{ box: Box; index: number }>
   ): Promise<RecognitionResult[]> {
     const cropsDebugPath = this.debugging.debugFolder + "/crops";
+    if (this.debugging.debug) {
+      this.toolkit.clearOutput(cropsDebugPath);
+    }
+
     const processingTasks = boxData.map(({ box, index }) =>
       this.processBox(sourceCanvas, box, index, boxData.length, cropsDebugPath)
     );

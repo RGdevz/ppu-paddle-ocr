@@ -8,3 +8,4 @@ out/*
 dist/*
 
 *.traineddata
+.DS_Store

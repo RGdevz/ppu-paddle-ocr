@@ -1,7 +1,7 @@
 {
   "name": "paddle-ocr.js",
   "version": "1.0.0",
-  "description": "A lightweight, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.",
+  "description": "A lightweight, type safe, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.",
   "keywords": [
     "paddleocr",
     "ocr",
