@@ -1,10 +1,10 @@
 import { PaddleOcrService } from "../src/";
 // import { PaddleOcrService } from "paddle-ocr.js";
 
-const ocrService = await PaddleOcrService.getInstance({
+const service = await PaddleOcrService.getInstance({
   debugging: {
-    debug: true,
-    verbose: true,
+    debug: false,
+    verbose: false,
   },
 });
 
@@ -13,8 +13,10 @@ const imgFile = Bun.file(imagePath);
 const fileBuffer = await imgFile.arrayBuffer();
 
 const startTime = Date.now();
-const result = await ocrService.recognize(fileBuffer);
+const result = await service.recognize(fileBuffer);
 const speed = Date.now() - startTime;
 
-console.log(result.map((el) => el.text).join(" "));
+service.destroy();
+
+console.log(result);
 console.log(`Operation completed in ${speed} ms`);
