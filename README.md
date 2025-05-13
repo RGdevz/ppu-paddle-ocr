@@ -1,13 +1,13 @@
-# paddle-ocr.js
+# ppu-paddle-ocr
 
 A lightweight, type-safe, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.
 
-![paddle-ocr-js demo](https://raw.githubusercontent.com/PT-Perkasa-Pilar-Utama/paddle-ocr.js/refs/heads/main/assets/paddle-ocr-demo.jpg)
+![ppu-paddle-ocr demo](https://raw.githubusercontent.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr/refs/heads/main/assets/ppu-paddle-ocr-demo.jpg)
 
 OCR should be as easy as:
 
 ```ts
-import { PaddleOcrService } from "paddle-ocr.js";
+import { PaddleOcrService } from "ppu-paddle-ocr";
 
 const service = await PaddleOcrService.getInstance();
 const result = await service.recognize(fileBuffer);
@@ -36,9 +36,9 @@ Built on top of `onnxruntime-node`, PaddleOCR.js handles all the complexity of m
 Install using your preferred package manager:
 
 ```bash
-npm install paddle-ocr.js
-yarn add paddle-ocr.js
-bun add paddle-ocr.js
+npm install ppu-paddle-ocr
+yarn add ppu-paddle-ocr
+bun add ppu-paddle-ocr
 ```
 
 > [!NOTE]

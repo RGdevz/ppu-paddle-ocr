@@ -1,5 +1,5 @@
 import { PaddleOcrService } from "../src/";
-// import { PaddleOcrService } from "paddle-ocr.js";
+// import { PaddleOcrService } from "ppu-paddle-ocr";
 
 const service = await PaddleOcrService.getInstance({
   debugging: {

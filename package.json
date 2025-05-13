@@ -1,5 +1,5 @@
 {
-  "name": "paddle-ocr.js",
+  "name": "ppu-paddle-ocr",
   "version": "1.0.0",
   "description": "A lightweight, type safe, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.",
   "keywords": [
@@ -50,7 +50,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/PT-Perkasa-Pilar-Utama/paddle-ocr.js.git"
+    "url": "https://github.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr.git"
   },
   "dependencies": {
     "onnxruntime-node": "^1.21.1",
