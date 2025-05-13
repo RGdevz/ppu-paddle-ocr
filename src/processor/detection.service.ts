@@ -330,10 +330,8 @@ export class DetectionService {
     processor.destroy();
     contours.destroy();
 
-    const sortedBoxes = this.sortBoxesByReadingOrder(boxes);
-
-    this.log(`Found ${sortedBoxes.length} potential text boxes`);
-    return sortedBoxes;
+    this.log(`Found ${boxes.length} potential text boxes`);
+    return boxes;
   }
 
   /**
@@ -434,19 +432,6 @@ export class DetectionService {
     const height = Math.min(originalHeight - y, Math.round(scaledHeight));
 
     return { x, y, width, height };
-  }
-
-  /**
-   * Sort boxes by reading order (top to bottom, left to right)
-   */
-  private sortBoxesByReadingOrder(boxes: Box[]): Box[] {
-    return [...boxes].sort((a, b) => {
-      // If boxes are roughly on the same line (within 1/4 of their combined heights)
-      if (Math.abs(a.y - b.y) < (a.height + b.height) / 4) {
-        return a.x - b.x; // Sort left to right
-      }
-      return a.y - b.y; // Otherwise sort top to bottom
-    });
   }
 
   /**
