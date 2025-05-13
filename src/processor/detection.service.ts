@@ -88,6 +88,8 @@ export class DetectionService {
         await this.debugDetectedBoxes(image, detectedBoxes);
       }
 
+      this.log(`Detected ${detectedBoxes.length} text boxes in image`);
+
       return detectedBoxes;
     } catch (error) {
       console.error(
