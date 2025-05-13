@@ -4,6 +4,7 @@ import {
   CanvasToolkit,
   Contours,
   createCanvas,
+  cv,
   ImageProcessor,
 } from "ppu-ocv";
 import {

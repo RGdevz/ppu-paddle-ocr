@@ -13,12 +13,6 @@ export interface ModelPathOptions {
    * Required if not using the library's built‑in default model.
    */
   recognition: string;
-
-  /**
-   * Filesystem path to the character dictionary file (.txt or .json).
-   * Required if not using the library's built‑in default dictionary.
-   */
-  dictionary: string;
 }
 
 /**
@@ -91,6 +85,12 @@ export interface RecognitionOptions {
    * @default 48
    */
   imageHeight?: number;
+
+  /**
+   * A list of loaded character dictionary (string) for
+   * recognition result decoding.
+   */
+  charactersDictionary: string[];
 }
 
 /**
@@ -101,7 +101,7 @@ export interface PaddleOptions {
   /**
    * File paths to the required OCR model components.
    */
-  model: ModelPathOptions;
+  model?: ModelPathOptions;
 
   /**
    * Controls parameters for text detection.

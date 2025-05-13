@@ -1,0 +1,192 @@
+import { readFileSync } from "fs";
+import * as ort from "onnxruntime-node";
+import * as path from "path";
+import { ImageProcessor } from "ppu-ocv";
+
+import { DEFAULT_PADDLE_OPTIONS } from "../constants";
+
+import type { PaddleOptions } from "../interface";
+import { DetectionService } from "./detection.service";
+import {
+  RecognitionService,
+  type RecognitionResult,
+} from "./recognition.service";
+
+/**
+ * PaddleOcrService - Provides OCR functionality using PaddleOCR models
+ *
+ * This service can be used either as a singleton or as separate instances
+ * depending on your application needs.
+ */
+export class PaddleOcrService {
+  private static instance: PaddleOcrService | null = null;
+  private options: PaddleOptions;
+
+  private detectionSession: ort.InferenceSession | null = null;
+  private recognitionSession: ort.InferenceSession | null = null;
+
+  /**
+   * Create a new PaddleOcrService instance
+   * @param options Optional configuration options
+   */
+  constructor(options?: PaddleOptions) {
+    this.options = {
+      ...DEFAULT_PADDLE_OPTIONS,
+      ...options,
+    };
+  }
+
+  /**
+   * Logs a message if verbose debugging is enabled
+   */
+  private log(message: string): void {
+    if (this.options.debugging?.verbose) {
+      console.log(`[DetectionService] ${message}`);
+    }
+  }
+
+  /**
+   * Initialize the OCR service by loading models
+   * @param overrideOptions Optional parameters to override the constructor options
+   */
+  public async initialize(
+    overrideOptions?: Partial<PaddleOptions>
+  ): Promise<void> {
+    try {
+      const effectiveOptions = {
+        ...this.options,
+        ...overrideOptions,
+      };
+
+      const resolvedDetectionPath = path.resolve(
+        process.cwd(),
+        effectiveOptions.model!.detection
+      );
+      const resolvedRecognitionPath = path.resolve(
+        process.cwd(),
+        effectiveOptions.model!.recognition
+      );
+
+      this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
+
+      const detModelBuffer = readFileSync(resolvedDetectionPath).buffer;
+      this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
+
+      this.log(
+        `Detection ONNX model loaded successfully\nLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
+      );
+
+      const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
+      this.recognitionSession = await ort.InferenceSession.create(
+        recModelBuffer
+      );
+
+      this.log(
+        `Recognition ONNX model loaded successfully\nCharacter dictionary loaded with ${
+          this.options.recognition?.charactersDictionary.length || 0
+        } entries.`
+      );
+    } catch (error) {
+      console.error("Failed to initialize PaddleOcrService:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get or create the singleton instance of PaddleOcrService
+   * @param options Configuration options for the service
+   * @returns A promise resolving to the singleton instance
+   * @example
+   * const service = await PaddleOcrService.getInstance({
+   *   verbose: true,
+   *   detectionModelPath: './models/myDetection.onnx'
+   * });
+   */
+  public static async getInstance(
+    options?: PaddleOptions
+  ): Promise<PaddleOcrService> {
+    if (!PaddleOcrService.instance) {
+      PaddleOcrService.instance = new PaddleOcrService(options);
+      await PaddleOcrService.instance.initialize();
+    } else if (options) {
+      await PaddleOcrService.instance.initialize(options);
+    }
+    return PaddleOcrService.instance;
+  }
+
+  /**
+   * Check if the service is initialized with models loaded
+   */
+  public isInitialized(): boolean {
+    return this.detectionSession !== null && this.recognitionSession !== null;
+  }
+
+  /**
+   * Change models in the singleton instance
+   * @param options New configuration options
+   */
+  public static async changeModel(
+    options: Partial<PaddleOptions>
+  ): Promise<PaddleOcrService> {
+    if (!PaddleOcrService.instance) {
+      PaddleOcrService.instance = new PaddleOcrService(options);
+      await PaddleOcrService.instance.initialize();
+    } else {
+      await PaddleOcrService.instance.initialize(options);
+    }
+
+    return PaddleOcrService.instance;
+  }
+
+  /**
+   * Create a new instance instead of using the singleton
+   * This is useful when you need multiple instances with different models
+   * @param options Configuration options for this specific instance
+   */
+  public static async createInstance(
+    options?: PaddleOptions
+  ): Promise<PaddleOcrService> {
+    const instance = new PaddleOcrService(options);
+    await instance.initialize();
+
+    return instance;
+  }
+
+  /**
+   * Runs object detection on the provided image buffer, then performs
+   * recognition on the detected regions.
+   *
+   * @param image - The raw image data as an ArrayBuffer.
+   * @return A promise that resolves to an array of RecognitionResult objects,
+   *          one for each detected and recognized region.
+   */
+  public async recognize(image: ArrayBuffer): Promise<RecognitionResult[]> {
+    await ImageProcessor.initRuntime();
+
+    const detector = new DetectionService(
+      this.detectionSession!,
+      this.options.detection,
+      this.options.debugging
+    );
+    const recognitor = new RecognitionService(
+      this.recognitionSession!,
+      this.options.recognition,
+      this.options.debugging
+    );
+
+    const detection = await detector.run(image);
+    const result = await recognitor.run(image, detection);
+
+    return result;
+  }
+  /**
+   * Releases the onnx runtime session for both
+   * detection and recognition model.
+   */
+  public async destroy(): Promise<void> {
+    await this.detectionSession?.release();
+    await this.recognitionSession?.release();
+  }
+}
+
+export default PaddleOcrService;
