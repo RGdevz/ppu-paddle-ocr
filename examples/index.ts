@@ -18,5 +18,5 @@ const speed = Date.now() - startTime;
 
 service.destroy();
 
-console.log(result);
+console.log(JSON.stringify(result, null, 2));
 console.log(`Operation completed in ${speed} ms`);

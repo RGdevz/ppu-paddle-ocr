@@ -12,6 +12,11 @@ import {
   type RecognitionResult,
 } from "./recognition.service";
 
+export interface PaddleOcrResult {
+  text: string;
+  lines: RecognitionResult[][];
+}
+
 /**
  * PaddleOcrService - Provides OCR functionality using PaddleOCR models
  *
@@ -161,7 +166,7 @@ export class PaddleOcrService {
    * @return A promise that resolves to an array of RecognitionResult objects,
    *          one for each detected and recognized region.
    */
-  public async recognize(image: ArrayBuffer): Promise<RecognitionResult[]> {
+  public async recognize(image: ArrayBuffer): Promise<PaddleOcrResult> {
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(
@@ -176,10 +181,62 @@ export class PaddleOcrService {
     );
 
     const detection = await detector.run(image);
-    const result = await recognitor.run(image, detection);
+    const recognition = await recognitor.run(image, detection);
 
+    return this.groupResult(recognition);
+  }
+
+  /**
+   * Groups recognition results into lines based on their vertical positions
+   * and returns the full text and organized lines efficiently.
+   */
+  private groupResult(recognition: RecognitionResult[]): PaddleOcrResult {
+    const result: PaddleOcrResult = {
+      text: "",
+      lines: [],
+    };
+
+    if (!recognition.length) {
+      return result;
+    }
+
+    let currentLine: RecognitionResult[] = [recognition[0]];
+    let fullText = recognition[0].text;
+
+    let avgHeight = recognition[0].box.height;
+
+    for (let i = 1; i < recognition.length; i++) {
+      const current = recognition[i];
+      const previous = recognition[i - 1];
+
+      const verticalGap = Math.abs(current.box.y - previous.box.y);
+      const threshold = avgHeight * 0.5;
+
+      if (verticalGap <= threshold) {
+        currentLine.push(current);
+        fullText += ` ${current.text}`;
+
+        avgHeight =
+          currentLine.reduce((sum, r) => sum + r.box.height, 0) /
+          currentLine.length;
+      } else {
+        result.lines.push([...currentLine]);
+
+        fullText += `\n${current.text}`;
+
+        currentLine = [current];
+        avgHeight = current.box.height;
+      }
+    }
+
+    if (currentLine.length > 0) {
+      result.lines.push([...currentLine]);
+    }
+
+    result.text = fullText;
     return result;
   }
+
   /**
    * Releases the onnx runtime session for both
    * detection and recognition model.
