@@ -1,5 +1,11 @@
 import * as ort from "onnxruntime-node";
-import { Canvas, Contours, createCanvas, ImageProcessor } from "ppu-ocv";
+import {
+  Canvas,
+  CanvasToolkit,
+  Contours,
+  createCanvas,
+  ImageProcessor,
+} from "ppu-ocv";
 import {
   DEFAULT_DEBUGGING_OPTIONS,
   DEFAULT_DETECTION_OPTIONS,
@@ -74,7 +80,14 @@ export class DetectionService {
         return [];
       }
 
-      return this.postprocessDetection(detection, input);
+      const detectedBoxes = this.postprocessDetection(detection, input);
+
+      if (this.debugging.debug) {
+        await this.debugDetectionCanvas(detection, input.width, input.height);
+        await this.debugDetectedBoxes(image, detectedBoxes);
+      }
+
+      return detectedBoxes;
     } catch (error) {
       console.error(
         "Error during text detection:",
@@ -431,6 +444,56 @@ export class DetectionService {
       }
       return a.y - b.y; // Otherwise sort top to bottom
     });
+  }
+
+  /**
+   * Debug the detection canvas in binary image format (thresholded)
+   */
+  private async debugDetectionCanvas(
+    detection: Float32Array,
+    width: number,
+    height: number
+  ): Promise<void> {
+    const canvas = this.tensorToCanvas(detection, width, height);
+
+    const dir = this.debugging.debugFolder!;
+    await CanvasToolkit.getInstance().saveImage({
+      canvas,
+      filename: "detection-debug",
+      path: dir,
+    });
+
+    this.log(`Probability map visualized and saved to: ${dir}`);
+  }
+
+  /**
+   * Debug the bounding boxes by drawinga rectangle onto the original image
+   */
+  private async debugDetectedBoxes(image: ArrayBuffer, boxes: Box[]) {
+    const canvas = await ImageProcessor.prepareCanvas(image);
+    const ctx = canvas.getContext("2d");
+
+    const toolkit = CanvasToolkit.getInstance();
+
+    for (const box of boxes) {
+      const { x, y, width, height } = box;
+      toolkit.drawLine({
+        ctx,
+        x,
+        y,
+        width,
+        height,
+      });
+    }
+
+    const dir = this.debugging.debugFolder!;
+    await CanvasToolkit.getInstance().saveImage({
+      canvas,
+      filename: "boxes-debug",
+      path: dir,
+    });
+
+    this.log(`Boxes visualized and saved to: ${dir}`);
   }
 
   /**
