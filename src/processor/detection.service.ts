@@ -63,6 +63,7 @@ export class DetectionService {
 
   /**
    * Main method to run text detection on an image
+   * @param image ArrayBuffer of the image
    */
   async run(image: ArrayBuffer): Promise<Box[]> {
     this.log("Starting text detection process");
