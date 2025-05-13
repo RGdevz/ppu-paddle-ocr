@@ -495,12 +495,4 @@ export class DetectionService {
 
     this.log(`Boxes visualized and saved to: ${dir}`);
   }
-
-  /**
-   * Release resources
-   */
-  async destroy(): Promise<void> {
-    await this.session.release();
-    this.log("Detection service resources released");
-  }
 }
