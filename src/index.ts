@@ -1,4 +1,7 @@
-export { PaddleOcrService } from "./processor/paddle-ocr.service";
+export {
+  PaddleOcrService,
+  type PaddleOcrResult,
+} from "./processor/paddle-ocr.service";
 
 export type {
   Box,
