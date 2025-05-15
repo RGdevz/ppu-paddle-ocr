@@ -70,7 +70,7 @@ export class DetectionService {
     this.log("Starting text detection process");
 
     try {
-      const input = await this.prepocessDetection(image);
+      const input = await this.preprocessDetection(image);
       const detection = await this.runInference(
         input.tensor,
         input.width,
@@ -104,7 +104,7 @@ export class DetectionService {
   /**
    * Preprocess an image for text detection
    */
-  private async prepocessDetection(
+  private async preprocessDetection(
     image: ArrayBuffer
   ): Promise<PreprocessDetectionResult> {
     const initialCanvas = await ImageProcessor.prepareCanvas(image);
