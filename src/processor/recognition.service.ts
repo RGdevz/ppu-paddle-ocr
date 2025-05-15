@@ -127,14 +127,10 @@ export class RecognitionService {
 
     try {
       const cropCanvas = this.cropRegion(sourceCanvas, box);
-
-      if (this.debugging.debug) {
-        await this.saveDebugCrop(cropCanvas, index, debugPath);
-      }
-
       const recognizedText = await this.recognizeText(cropCanvas);
 
       if (this.debugging.debug) {
+        await this.saveDebugCrop(cropCanvas, index, debugPath);
         this.logProcessingDetails(
           box,
           index,
