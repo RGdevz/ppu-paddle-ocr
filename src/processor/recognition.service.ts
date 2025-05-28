@@ -54,18 +54,22 @@ export class RecognitionService {
 
   /**
    * Main method to run text recognition on an image with detected regions
-   * @param image The original image buffer
+   * @param image The original image buffer or image in Canvas
    * @param detection Array of bounding boxes from text detection
    * @returns Array of recognition results with text and bounding box, sorted in reading order
    */
   async run(
-    image: ArrayBuffer,
+    image: ArrayBuffer | Canvas,
     detection: Box[]
   ): Promise<RecognitionResult[]> {
     this.log("Starting text recognition process");
 
     try {
-      const sourceCanvasForCrop = await ImageProcessor.prepareCanvas(image);
+      const sourceCanvasForCrop =
+        image instanceof Canvas
+          ? image
+          : await ImageProcessor.prepareCanvas(image);
+
       const validBoxes = this.filterValidBoxes(detection);
       const results = await this.processBoxesInParallel(
         sourceCanvasForCrop,
