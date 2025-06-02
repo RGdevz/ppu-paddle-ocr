@@ -302,7 +302,8 @@ export class DetectionService {
     detection: Float32Array,
     input: PreprocessDetectionResult,
     minBoxAreaOnPadded: number = this.options.minimumAreaThreshold || 20,
-    paddingRatio: number = this.options.paddingRatio || 0.6
+    paddingVertical: number = this.options.paddingVertical || 0.4,
+    paddingHorizontal: number = this.options.paddingHorizontal || 0.6
   ): Box[] {
     this.log("Post-processing detection results...");
 
@@ -325,7 +326,8 @@ export class DetectionService {
       originalWidth,
       originalHeight,
       minBoxAreaOnPadded,
-      paddingRatio
+      paddingVertical,
+      paddingHorizontal
     );
 
     processor.destroy();
@@ -346,7 +348,8 @@ export class DetectionService {
     originalWidth: number,
     originalHeight: number,
     minBoxArea: number,
-    paddingRatio: number
+    paddingVertical: number,
+    paddingHorizontal: number
   ): Box[] {
     const boxes: Box[] = [];
 
@@ -361,7 +364,8 @@ export class DetectionService {
         rect,
         width,
         height,
-        paddingRatio
+        paddingVertical,
+        paddingHorizontal
       );
 
       const finalBox = this.convertToOriginalCoordinates(
@@ -386,10 +390,11 @@ export class DetectionService {
     rect: { x: number; y: number; width: number; height: number },
     maxWidth: number,
     maxHeight: number,
-    paddingRatio: number
+    paddingVertical: number,
+    paddingHorizontal: number
   ) {
-    const verticalPadding = Math.round(rect.height * paddingRatio);
-    const horizontalPadding = Math.round(rect.height * paddingRatio * 2);
+    const verticalPadding = Math.round(rect.height * paddingVertical);
+    const horizontalPadding = Math.round(rect.height * paddingHorizontal);
 
     let x = rect.x - horizontalPadding;
     let y = rect.y - verticalPadding;

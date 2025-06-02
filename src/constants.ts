@@ -147,7 +147,8 @@ export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
   stdDeviation: [0.229, 0.224, 0.225],
   maxSideLength: 960,
   minimumAreaThreshold: 20,
-  paddingRatio: 0.6,
+  paddingVertical: 0.4,
+  paddingHorizontal: 0.6,
 };
 
 export const DEFAULT_RECOGNITION_OPTIONS: RecognitionOptions = {

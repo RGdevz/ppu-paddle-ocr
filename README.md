@@ -137,13 +137,14 @@ Specifies filesystem paths to the OCR models and dictionary files.
 
 Controls preprocessing and filtering parameters during text detection.
 
-| Property               |            Type            |         Default         | Description                                                    |
-| :--------------------- | :------------------------: | :---------------------: | :------------------------------------------------------------- |
-| `mean`                 | `[number, number, number]` | `[0.485, 0.456, 0.406]` | Per-channel mean values for input normalization [R, G, B].     |
-| `stdDeviation`         | `[number, number, number]` | `[0.229, 0.224, 0.225]` | Per-channel standard deviation values for input normalization. |
-| `maxSideLength`        |          `number`          |          `960`          | Maximum dimension (longest side) for input images (px).        |
-| `paddingRatio`         |          `number`          |          `0.6`          | Fractional padding added to each detected text box.            |
-| `minimumAreaThreshold` |          `number`          |          `20`           | Discard boxes with area below this threshold (px²).            |
+| Property               |            Type            |         Default         | Description                                                      |
+| :--------------------- | :------------------------: | :---------------------: | :--------------------------------------------------------------- |
+| `mean`                 | `[number, number, number]` | `[0.485, 0.456, 0.406]` | Per-channel mean values for input normalization [R, G, B].       |
+| `stdDeviation`         | `[number, number, number]` | `[0.229, 0.224, 0.225]` | Per-channel standard deviation values for input normalization.   |
+| `maxSideLength`        |          `number`          |          `960`          | Maximum dimension (longest side) for input images (px).          |
+| `paddingVertical`      |          `number`          |          `0.4`          | Fractional padding added vertically to each detected text box.   |
+| `paddingHorizontal`    |          `number`          |          `0.6`          | Fractional padding added horizontally to each detected text box. |
+| `minimumAreaThreshold` |          `number`          |          `20`           | Discard boxes with area below this threshold (px²).              |
 
 #### `RecognitionOptions`
 

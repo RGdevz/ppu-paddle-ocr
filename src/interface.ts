@@ -63,10 +63,16 @@ export interface DetectionOptions {
   maxSideLength?: number;
 
   /**
-   * Padding applied to each detected box as a fraction of its height.
+   * Padding applied to each detected box vertical as a fraction of its height
+   * @default 0.4
+   */
+  paddingVertical?: number;
+
+  /**
+   * Padding applied to each detected box vertical as a fraction of its height
    * @default 0.6
    */
-  paddingRatio?: number;
+  paddingHorizontal?: number;
 
   /**
    * Remove detected boxes with area below this threshold, in pixels.
