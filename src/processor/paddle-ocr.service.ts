@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import * as ort from "onnxruntime-node";
 import * as path from "path";
-import { ImageProcessor } from "ppu-ocv";
+import { Canvas, ImageProcessor } from "ppu-ocv";
 
 import { DEFAULT_PADDLE_OPTIONS } from "../constants";
 
@@ -162,11 +162,13 @@ export class PaddleOcrService {
    * Runs object detection on the provided image buffer, then performs
    * recognition on the detected regions.
    *
-   * @param image - The raw image data as an ArrayBuffer.
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
    * @return A promise that resolves to an array of RecognitionResult objects,
    *          one for each detected and recognized region.
    */
-  public async recognize(image: ArrayBuffer): Promise<PaddleOcrResult> {
+  public async recognize(
+    image: ArrayBuffer | Canvas
+  ): Promise<PaddleOcrResult> {
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(

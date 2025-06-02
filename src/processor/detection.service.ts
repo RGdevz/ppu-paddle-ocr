@@ -64,9 +64,9 @@ export class DetectionService {
 
   /**
    * Main method to run text detection on an image
-   * @param image ArrayBuffer of the image
+   * @param image ArrayBuffer of the image or Canvas
    */
-  async run(image: ArrayBuffer): Promise<Box[]> {
+  async run(image: ArrayBuffer | Canvas): Promise<Box[]> {
     this.log("Starting text detection process");
 
     try {
@@ -105,9 +105,13 @@ export class DetectionService {
    * Preprocess an image for text detection
    */
   private async preprocessDetection(
-    image: ArrayBuffer
+    image: ArrayBuffer | Canvas
   ): Promise<PreprocessDetectionResult> {
-    const initialCanvas = await ImageProcessor.prepareCanvas(image);
+    const initialCanvas =
+      image instanceof Canvas
+        ? image
+        : await ImageProcessor.prepareCanvas(image);
+
     const { width: originalWidth, height: originalHeight } = initialCanvas;
 
     const {
@@ -463,8 +467,12 @@ export class DetectionService {
   /**
    * Debug the bounding boxes by drawinga rectangle onto the original image
    */
-  private async debugDetectedBoxes(image: ArrayBuffer, boxes: Box[]) {
-    const canvas = await ImageProcessor.prepareCanvas(image);
+  private async debugDetectedBoxes(image: ArrayBuffer | Canvas, boxes: Box[]) {
+    const canvas =
+      image instanceof Canvas
+        ? image
+        : await ImageProcessor.prepareCanvas(image);
+
     const ctx = canvas.getContext("2d");
 
     const toolkit = CanvasToolkit.getInstance();
