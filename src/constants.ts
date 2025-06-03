@@ -22,13 +22,13 @@ const PACKAGE_ROOT = getCurrentDirPath();
 export const DEFAULT_DETECTION_MODEL_PATH: string = path.join(
   PACKAGE_ROOT,
   "models",
-  "en_PP-OCRv3_det_infer.onnx"
+  "PP-OCRv5_mobile_det_infer.onnx"
 );
 
 export const DEFAULT_RECOGNITION_MODEL_PATH: string = path.join(
   PACKAGE_ROOT,
   "models",
-  "en_PP-OCRv3_rec_infer.onnx"
+  "en_PP-OCRv4_mobile_rec_infer.onnx"
 );
 
 export const DEFAULT_CHARACTERS_DICTIONARY_PATH: string = path.join(

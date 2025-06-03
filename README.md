@@ -96,10 +96,16 @@ See: [Example usage](./examples)
 
 ## Models
 
-This project default onnx models uses PaddleOCR v3 models as follow:
+### `ppu-paddle-ocr` v1.x.x
 
 - detection: `en_PP-OCRv3_det_infer.onnx`
 - recogniton: `en_PP-OCRv3_rec_infer.onnx`
+- dictionary: `en_dict.txt` (97 class)
+
+### `ppu-paddle-ocr` v2.x.x
+
+- detection: `PP-OCRv5_mobile_det_infer.onnx`
+- recogniton: `en_PP-OCRv4_mobile_rec_infer.onnx`
 - dictionary: `en_dict.txt` (97 class)
 
 See: [Models](./src/models/)
