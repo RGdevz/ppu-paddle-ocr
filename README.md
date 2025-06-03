@@ -109,6 +109,7 @@ See: [Example usage](./examples)
 - dictionary: `en_dict.txt` (97 class)
 
 See: [Models](./src/models/)
+See also: [How to convert paddle ocr model to onnx](./examples/convert-onnx.ipynb)
 
 ## Configuration
 
