@@ -13,6 +13,12 @@ export interface ModelPathOptions {
    * Required if not using the library's built‑in default model.
    */
   recognition: string;
+
+  /**
+   * Filesystem path to the character dictionary file.
+   * Required if not using the library's built‑in default dictionary (en_dict.txt).
+   */
+  charactersDictionary: string;
 }
 
 /**

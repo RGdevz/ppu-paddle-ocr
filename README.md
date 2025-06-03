@@ -100,8 +100,9 @@ This project default onnx models uses PaddleOCR v3 models as follow:
 
 - detection: `en_PP-OCRv3_det_infer.onnx`
 - recogniton: `en_PP-OCRv3_rec_infer.onnx`
+- dictionary: `en_dict.txt` (97 class)
 
-Read more: https://paddlepaddle.github.io/PaddleOCR/main/en/ppocr/model_list.html#22-english-recognition-model
+See: [Models](./src/models/)
 
 ## Configuration
 
@@ -127,13 +128,15 @@ export interface PaddleOptions {
 
 Specifies filesystem paths to the OCR models and dictionary files.
 
-| Property      |   Type   |           Required            | Description                              |
-| :------------ | :------: | :---------------------------: | :--------------------------------------- |
-| `detection`   | `string` | **Yes** if not using defaults | Path to the text detection model file.   |
-| `recognition` | `string` | **Yes** if not using defaults | Path to the text recognition model file. |
+| Property               |   Type   |           Required            | Description                              |
+| :--------------------- | :------: | :---------------------------: | :--------------------------------------- |
+| `detection`            | `string` | **Yes** if not using defaults | Path to the text detection model file.   |
+| `recognition`          | `string` | **Yes** if not using defaults | Path to the text recognition model file. |
+| `charactersDictionary` | `string` | **Yes** if not using defaults | Path to the dictionary file.             |
 
 > [!NOTE]  
 > If you omit model, the library will attempt to use built‑in default models.
+> Don't forget to add space and blank at the end of the dictionary file.
 
 #### `DetectionOptions`
 
@@ -152,15 +155,9 @@ Controls preprocessing and filtering parameters during text detection.
 
 Controls parameters for the text recognition stage.
 
-| Property               |    Type    | Default  | Description                                                |
-| :--------------------- | :--------: | :------: | :--------------------------------------------------------- |
-| `imageHeight`          |  `number`  |   `48`   | Fixed height for resized input text line images (px).      |
-| `charactersDictionary` | `string[]` | 97 chars | Array of characters used for decoding recognition results. |
-
-> [!NOTE]  
-> `charactersDictionary` is required to map model outputs to readable text
-> and needed to match `recognition model` output classes count
-> See [here](./src/constants.ts#L21) for the default chars list
+| Property      |   Type   | Default | Description                                           |
+| :------------ | :------: | :-----: | :---------------------------------------------------- |
+| `imageHeight` | `number` |  `48`   | Fixed height for resized input text line images (px). |
 
 #### `DebuggingOptions`
 

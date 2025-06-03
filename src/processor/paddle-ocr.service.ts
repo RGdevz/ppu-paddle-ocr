@@ -71,23 +71,65 @@ export class PaddleOcrService {
         process.cwd(),
         effectiveOptions.model!.recognition
       );
+      const resolvedCharactersPath = path.resolve(
+        process.cwd(),
+        effectiveOptions.model!.charactersDictionary
+      );
 
       this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
 
       const detModelBuffer = readFileSync(resolvedDetectionPath).buffer;
       this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
+      await new Promise((resolve) => setImmediate(resolve));
 
       this.log(
-        `Detection ONNX model loaded successfully\nLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
+        `Detection ONNX model loaded successfully\n\tLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
+      );
+
+      this.log(
+        `input: ${this.detectionSession.inputNames}\n\toutput: ${
+          this.detectionSession.outputNames
+        }\n\tinputMetadata: ${JSON.stringify(
+          this.detectionSession.inputMetadata
+        )}\n\toutputMetadata: ${JSON.stringify(
+          this.detectionSession.outputMetadata
+        )}`
       );
 
       const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
       this.recognitionSession = await ort.InferenceSession.create(
         recModelBuffer
       );
+      await new Promise((resolve) => setImmediate(resolve));
 
       this.log(
-        `Recognition ONNX model loaded successfully\nCharacter dictionary loaded with ${
+        `Recognition ONNX model loaded successfully\n\tinput: ${
+          this.recognitionSession.inputNames
+        }\n\toutput: ${
+          this.recognitionSession.outputNames
+        }\n\tinputMetadata: ${JSON.stringify(
+          this.recognitionSession.inputMetadata
+        )}\n\toutputMetadata: ${JSON.stringify(
+          this.recognitionSession.outputMetadata
+        )}`
+      );
+
+      this.log(`Loading character dictionary from: ${resolvedCharactersPath}`);
+      const charactersDictionary = readFileSync(
+        resolvedCharactersPath,
+        "utf-8"
+      ).split("\n");
+
+      if (!charactersDictionary.length) {
+        throw new Error(
+          `Character dictionary at ${resolvedCharactersPath} is empty or not found.`
+        );
+      }
+
+      this.options.recognition!.charactersDictionary = charactersDictionary;
+
+      this.log(
+        `Character dictionary loaded with ${
           this.options.recognition?.charactersDictionary.length || 0
         } entries.`
       );

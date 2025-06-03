@@ -245,15 +245,17 @@ export class DetectionService {
         height,
         width,
       ]);
+
       const feeds = { x: inputTensor };
       const results = await this.session.run(feeds);
-      const outputTensor = results["sigmoid_0.tmp_0"];
+      const outputTensor =
+        results[this.session.outputNames[0] || "sigmoid_0.tmp_0"];
 
       this.log("Detection inference complete!");
 
       if (!outputTensor) {
         console.error(
-          "Output tensor 'sigmoid_0.tmp_0' not found in detection results"
+          `Output tensor ${this.session.outputNames[0]}  not found in detection results`
         );
         return null;
       }
