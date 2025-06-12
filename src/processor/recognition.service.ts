@@ -9,6 +9,7 @@ import type { Box, DebuggingOptions, RecognitionOptions } from "../interface";
 export interface RecognitionResult {
   text: string;
   box: Box;
+  confidence: number;
 }
 
 /**
@@ -131,7 +132,9 @@ export class RecognitionService {
 
     try {
       const cropCanvas = this.cropRegion(sourceCanvas, box);
-      const recognizedText = await this.recognizeText(cropCanvas);
+      const { text: recognizedText, confidence } = await this.recognizeText(
+        cropCanvas
+      );
 
       if (this.debugging.debug) {
         await this.saveDebugCrop(cropCanvas, index, debugPath);
@@ -144,7 +147,7 @@ export class RecognitionService {
         );
       }
 
-      return { text: recognizedText, box };
+      return { text: recognizedText, box, confidence };
     } catch (e: any) {
       console.error(`Error processing box ${index + 1}: ${e.message}`, e.stack);
       return null;
@@ -234,7 +237,9 @@ export class RecognitionService {
   /**
    * Recognizes text in a cropped canvas region
    */
-  private async recognizeText(cropCanvas: Canvas): Promise<string> {
+  private async recognizeText(
+    cropCanvas: Canvas
+  ): Promise<{ text: string; confidence: number }> {
     const { imageTensor, tensorWidth, tensorHeight } =
       await this.preprocessImage(cropCanvas);
 
@@ -351,7 +356,10 @@ export class RecognitionService {
   /**
    * Decodes the results from the model output tensor
    */
-  private decodeResults(outputTensor: ort.Tensor): string {
+  private decodeResults(outputTensor: ort.Tensor): {
+    text: string;
+    confidence: number;
+  } {
     const outputData = outputTensor.data as Float32Array;
     const outputShape = outputTensor.dims;
 
@@ -380,16 +388,14 @@ export class RecognitionService {
     sequenceLength: number,
     numClasses: number,
     charDict: string[]
-  ): string {
+  ): { text: string; confidence: number } {
     let decodedText = "";
     let lastCharIndex = -1;
+    const charConfidences: number[] = [];
 
     for (let t = 0; t < sequenceLength; t++) {
-      const { index: predictedClassIndex } = this.findMaxProbabilityClass(
-        logits,
-        t,
-        numClasses
-      );
+      const { value: maxProb, index: predictedClassIndex } =
+        this.findMaxProbabilityClass(logits, t, numClasses);
 
       if (
         predictedClassIndex === RecognitionService.BLANK_INDEX ||
@@ -402,6 +408,7 @@ export class RecognitionService {
       if (this.isValidDictionaryIndex(predictedClassIndex, charDict)) {
         this.appendCharacterToText(predictedClassIndex, charDict, (char) => {
           decodedText += char;
+          charConfidences.push(maxProb);
         });
       } else {
         console.warn(
@@ -412,7 +419,12 @@ export class RecognitionService {
       lastCharIndex = predictedClassIndex;
     }
 
-    return decodedText;
+    const confidence =
+      charConfidences.length > 0
+        ? charConfidences.reduce((a, b) => a + b, 0) / charConfidences.length
+        : 0;
+
+    return { text: decodedText, confidence };
   }
 
   /**

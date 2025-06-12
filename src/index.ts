@@ -1,5 +1,6 @@
 export {
   PaddleOcrService,
+  type FlattenedPaddleOcrResult,
   type PaddleOcrResult,
 } from "./processor/paddle-ocr.service";
 

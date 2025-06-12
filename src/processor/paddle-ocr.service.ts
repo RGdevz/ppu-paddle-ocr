@@ -15,6 +15,13 @@ import {
 export interface PaddleOcrResult {
   text: string;
   lines: RecognitionResult[][];
+  confidence: number;
+}
+
+export interface FlattenedPaddleOcrResult {
+  text: string;
+  results: RecognitionResult[];
+  confidence: number;
 }
 
 /**
@@ -87,13 +94,7 @@ export class PaddleOcrService {
       );
 
       this.log(
-        `input: ${this.detectionSession.inputNames}\n\toutput: ${
-          this.detectionSession.outputNames
-        }\n\tinputMetadata: ${JSON.stringify(
-          this.detectionSession.inputMetadata
-        )}\n\toutputMetadata: ${JSON.stringify(
-          this.detectionSession.outputMetadata
-        )}`
+        `input: ${this.detectionSession.inputNames}\n\toutput: ${this.detectionSession.outputNames}`
       );
 
       const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
@@ -103,15 +104,7 @@ export class PaddleOcrService {
       await new Promise((resolve) => setImmediate(resolve));
 
       this.log(
-        `Recognition ONNX model loaded successfully\n\tinput: ${
-          this.recognitionSession.inputNames
-        }\n\toutput: ${
-          this.recognitionSession.outputNames
-        }\n\tinputMetadata: ${JSON.stringify(
-          this.recognitionSession.inputMetadata
-        )}\n\toutputMetadata: ${JSON.stringify(
-          this.recognitionSession.outputMetadata
-        )}`
+        `Recognition ONNX model loaded successfully\n\tinput: ${this.recognitionSession.inputNames}\n\toutput: ${this.recognitionSession.outputNames}`
       );
 
       this.log(`Loading character dictionary from: ${resolvedCharactersPath}`);
@@ -201,16 +194,41 @@ export class PaddleOcrService {
   }
 
   /**
+   * Runs OCR and returns a flattened list of recognized text boxes.
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @param options - Options object with `flatten` set to `true`.
+   * @return A promise that resolves to a flattened result object.
+   */
+  public recognize(
+    image: ArrayBuffer | Canvas,
+    options: { flatten: true }
+  ): Promise<FlattenedPaddleOcrResult>;
+
+  /**
+   * Runs OCR and returns recognized text grouped into lines.
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @param options - Optional options object. If `flatten` is `false` or omitted, this structure is returned.
+   * @return A promise that resolves to a result object with text lines.
+   */
+  public recognize(
+    image: ArrayBuffer | Canvas,
+    options?: { flatten?: false }
+  ): Promise<PaddleOcrResult>;
+
+  /**
    * Runs object detection on the provided image buffer, then performs
    * recognition on the detected regions.
    *
    * @param image - The raw image data as an ArrayBuffer or Canvas.
-   * @return A promise that resolves to an array of RecognitionResult objects,
-   *          one for each detected and recognized region.
+   * @param options - Optional configuration for the recognition output, e.g., `{ flatten: true }`.
+   * @return A promise that resolves to the OCR result, either grouped by lines or as a flat list.
    */
   public async recognize(
-    image: ArrayBuffer | Canvas
-  ): Promise<PaddleOcrResult> {
+    image: ArrayBuffer | Canvas,
+    options?: { flatten?: boolean }
+  ): Promise<PaddleOcrResult | FlattenedPaddleOcrResult> {
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(
@@ -227,26 +245,45 @@ export class PaddleOcrService {
     const detection = await detector.run(image);
     const recognition = await recognitor.run(image, detection);
 
-    return this.groupResult(recognition);
+    const processed = this.processRecognition(recognition);
+
+    if (options?.flatten) {
+      return {
+        text: processed.text,
+        results: recognition,
+        confidence: processed.confidence,
+      };
+    }
+
+    return processed;
   }
 
   /**
-   * Groups recognition results into lines based on their vertical positions
-   * and returns the full text and organized lines efficiently.
+   * Processes raw recognition results to generate the final text,
+   * grouped lines, and overall confidence.
    */
-  private groupResult(recognition: RecognitionResult[]): PaddleOcrResult {
+  private processRecognition(
+    recognition: RecognitionResult[]
+  ): PaddleOcrResult {
     const result: PaddleOcrResult = {
       text: "",
       lines: [],
+      confidence: 0,
     };
 
     if (!recognition.length) {
       return result;
     }
 
+    // Calculate overall confidence as the average of all individual confidences
+    const totalConfidence = recognition.reduce(
+      (sum, r) => sum + r.confidence,
+      0
+    );
+    result.confidence = totalConfidence / recognition.length;
+
     let currentLine: RecognitionResult[] = [recognition[0]];
     let fullText = recognition[0].text;
-
     let avgHeight = recognition[0].box.height;
 
     for (let i = 1; i < recognition.length; i++) {
