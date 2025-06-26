@@ -1,6 +1,6 @@
 {
   "name": "ppu-paddle-ocr",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A lightweight, type safe, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.",
   "keywords": [
     "paddleocr",
@@ -54,6 +54,6 @@
   },
   "dependencies": {
     "onnxruntime-node": "^1.21.1",
-    "ppu-ocv": "^1.2.3"
+    "ppu-ocv": "^1.3.0"
   }
 }

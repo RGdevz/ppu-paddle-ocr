@@ -50,6 +50,7 @@ export const DEFAULT_DEBUGGING_OPTIONS: DebuggingOptions = {
 };
 
 export const DEFAULT_DETECTION_OPTIONS: DetectionOptions = {
+  autoDeskew: true,
   mean: [0.485, 0.456, 0.406],
   stdDeviation: [0.229, 0.224, 0.225],
   maxSideLength: 960,
