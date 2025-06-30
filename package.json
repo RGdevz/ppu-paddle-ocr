@@ -1,6 +1,6 @@
 {
   "name": "ppu-paddle-ocr",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "A lightweight, type safe, PaddleOCR implementation in Bun/Node.js for text detection and recognition in JavaScript environments.",
   "keywords": [
     "paddleocr",
@@ -44,6 +44,7 @@
     "eslint": "latest",
     "eslint-plugin-jsdoc": "latest",
     "mitata": "latest",
+    "prettier": "3.6.2",
     "tsx": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",

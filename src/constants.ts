@@ -1,4 +1,3 @@
-import path from "path";
 import type {
   DebuggingOptions,
   DetectionOptions,
@@ -7,35 +6,13 @@ import type {
   RecognitionOptions,
 } from "./interface";
 
-import { fileURLToPath } from "url";
+import detModel from "./models/PP-OCRv5_mobile_det_infer.onnx" with { type: "file", embed: "false" };
+import recModel from "./models/en_PP-OCRv4_mobile_rec_infer.onnx" with { type: "file", embed: "false" };
+import dict from "./models/en_dict.txt" with { type: "file", embed: "false" };
 
-const getCurrentDirPath = () => {
-  if (typeof import.meta !== "undefined" && import.meta.url) {
-    const __filename = fileURLToPath(import.meta.url);
-    return path.dirname(__filename);
-  }
-  return __dirname;
-};
-
-const PACKAGE_ROOT = getCurrentDirPath();
-
-export const DEFAULT_DETECTION_MODEL_PATH: string = path.join(
-  PACKAGE_ROOT,
-  "models",
-  "PP-OCRv5_mobile_det_infer.onnx"
-);
-
-export const DEFAULT_RECOGNITION_MODEL_PATH: string = path.join(
-  PACKAGE_ROOT,
-  "models",
-  "en_PP-OCRv4_mobile_rec_infer.onnx"
-);
-
-export const DEFAULT_CHARACTERS_DICTIONARY_PATH: string = path.join(
-  PACKAGE_ROOT,
-  "models",
-  "en_dict.txt"
-);
+export const DEFAULT_DETECTION_MODEL_PATH: string = detModel;
+export const DEFAULT_RECOGNITION_MODEL_PATH: string = recModel;
+export const DEFAULT_CHARACTERS_DICTIONARY_PATH: string = dict;
 
 export const DEFAULT_MODEL_OPTIONS: ModelPathOptions = {
   detection: DEFAULT_DETECTION_MODEL_PATH,
