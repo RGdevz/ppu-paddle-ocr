@@ -65,61 +65,95 @@ export class PaddleOcrService {
     try {
       const effectiveOptions = merge({}, this.options, overrideOptions);
 
-      const resolvedDetectionPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.detection || ""
-      );
-      const resolvedRecognitionPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.recognition || ""
-      );
-      const resolvedCharactersPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.charactersDictionary || ""
-      );
+      const detectionModel = effectiveOptions.model?.detection;
+      if (!detectionModel) {
+        throw new Error(
+          "A detection model path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
 
-      this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
-
-      const detModelBuffer = readFileSync(resolvedDetectionPath).buffer;
-      this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
-      await new Promise((resolve) => setImmediate(resolve));
+      if (typeof detectionModel === "string") {
+        const resolvedDetectionPath = path.resolve(
+          process.cwd(),
+          detectionModel
+        );
+        this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
+        const modelBuffer = readFileSync(resolvedDetectionPath).buffer;
+        this.detectionSession = await ort.InferenceSession.create(modelBuffer);
+      } else {
+        this.log(`Loading Detection ONNX model from ArrayBuffer`);
+        this.detectionSession = await ort.InferenceSession.create(
+          detectionModel
+        );
+      }
 
       this.log(
-        `Detection ONNX model loaded successfully\n\tLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
+        `Detection ONNX model loaded successfully\n\tinput: ${this.detectionSession.inputNames}\n\toutput: ${this.detectionSession.outputNames}`
       );
 
-      this.log(
-        `input: ${this.detectionSession.inputNames}\n\toutput: ${this.detectionSession.outputNames}`
-      );
+      const recognitionModel = effectiveOptions.model?.recognition;
+      if (!recognitionModel) {
+        throw new Error(
+          "A recognition model path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
 
-      const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
-      this.recognitionSession = await ort.InferenceSession.create(
-        recModelBuffer
-      );
-      await new Promise((resolve) => setImmediate(resolve));
+      if (typeof recognitionModel === "string") {
+        const resolvedRecognitionPath = path.resolve(
+          process.cwd(),
+          recognitionModel
+        );
+        this.log(
+          `Loading Recognition ONNX model from: ${resolvedRecognitionPath}`
+        );
+        const modelBuffer = readFileSync(resolvedRecognitionPath).buffer;
+        this.recognitionSession = await ort.InferenceSession.create(
+          modelBuffer
+        );
+      } else {
+        this.log(`Loading Recognition ONNX model from ArrayBuffer`);
+        this.recognitionSession = await ort.InferenceSession.create(
+          recognitionModel
+        );
+      }
 
       this.log(
         `Recognition ONNX model loaded successfully\n\tinput: ${this.recognitionSession.inputNames}\n\toutput: ${this.recognitionSession.outputNames}`
       );
 
-      this.log(`Loading character dictionary from: ${resolvedCharactersPath}`);
-      const charactersDictionary = readFileSync(
-        resolvedCharactersPath,
-        "utf-8"
-      ).split("\n");
-
-      if (!charactersDictionary.length) {
+      const dictionarySource = effectiveOptions.model?.charactersDictionary;
+      if (!dictionarySource) {
         throw new Error(
-          `Character dictionary at ${resolvedCharactersPath} is empty or not found.`
+          "A character dictionary path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
+
+      let dictionaryContent: string;
+      if (typeof dictionarySource === "string") {
+        const resolvedCharactersPath = path.resolve(
+          process.cwd(),
+          dictionarySource
+        );
+        this.log(
+          `Loading character dictionary from: ${resolvedCharactersPath}`
+        );
+        dictionaryContent = readFileSync(resolvedCharactersPath, "utf-8");
+      } else {
+        this.log(`Loading character dictionary from ArrayBuffer`);
+        dictionaryContent = Buffer.from(dictionarySource).toString("utf-8");
+      }
+
+      const charactersDictionary = dictionaryContent.split("\n");
+
+      if (charactersDictionary.length === 0) {
+        throw new Error(
+          "Character dictionary is empty or could not be loaded."
         );
       }
 
       this.options.recognition!.charactersDictionary = charactersDictionary;
-
       this.log(
-        `Character dictionary loaded with ${
-          this.options.recognition?.charactersDictionary.length || 0
-        } entries.`
+        `Character dictionary loaded with ${charactersDictionary.length} entries.`
       );
     } catch (error) {
       console.error("Failed to initialize PaddleOcrService:", error);
@@ -134,7 +168,6 @@ export class PaddleOcrService {
    * @example
    * const service = await PaddleOcrService.getInstance({
    *   verbose: true,
-   *   detectionModelPath: './models/myDetection.onnx'
    * });
    */
   public static async getInstance(

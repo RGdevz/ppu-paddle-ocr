@@ -3,22 +3,22 @@
  */
 export interface ModelPathOptions {
   /**
-   * Filesystem path to the text detection model file.
+   * Onnx file buffer or path for the text detection model.
    * Required if not using the library's built‑in default model.
    */
-  detection?: string;
+  detection?: ArrayBuffer | string;
 
   /**
-   * Filesystem path to the text recognition model file.
+   * Onnx file buffer or path for the text recognition model.
    * Required if not using the library's built‑in default model.
    */
-  recognition?: string;
+  recognition?: ArrayBuffer | string;
 
   /**
-   * Filesystem path to the character dictionary file.
+   * Onnx file buffer or path for the character dictionary.
    * Required if not using the library's built‑in default dictionary (en_dict.txt).
    */
-  charactersDictionary?: string;
+  charactersDictionary?: ArrayBuffer | string;
 }
 
 /**
