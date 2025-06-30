@@ -82,9 +82,8 @@ export class PaddleOcrService {
         this.detectionSession = await ort.InferenceSession.create(modelBuffer);
       } else {
         this.log(`Loading Detection ONNX model from ArrayBuffer`);
-        this.detectionSession = await ort.InferenceSession.create(
-          detectionModel
-        );
+        this.detectionSession =
+          await ort.InferenceSession.create(detectionModel);
       }
 
       this.log(
@@ -107,14 +106,12 @@ export class PaddleOcrService {
           `Loading Recognition ONNX model from: ${resolvedRecognitionPath}`
         );
         const modelBuffer = readFileSync(resolvedRecognitionPath).buffer;
-        this.recognitionSession = await ort.InferenceSession.create(
-          modelBuffer
-        );
+        this.recognitionSession =
+          await ort.InferenceSession.create(modelBuffer);
       } else {
         this.log(`Loading Recognition ONNX model from ArrayBuffer`);
-        this.recognitionSession = await ort.InferenceSession.create(
-          recognitionModel
-        );
+        this.recognitionSession =
+          await ort.InferenceSession.create(recognitionModel);
       }
 
       this.log(
@@ -130,14 +127,20 @@ export class PaddleOcrService {
 
       let dictionaryContent: string;
       if (typeof dictionarySource === "string") {
-        const resolvedCharactersPath = path.resolve(
-          process.cwd(),
-          dictionarySource
-        );
-        this.log(
-          `Loading character dictionary from: ${resolvedCharactersPath}`
-        );
-        dictionaryContent = readFileSync(resolvedCharactersPath, "utf-8");
+        const isLikelyContent = dictionarySource.includes("\n");
+
+        if (isLikelyContent) {
+          dictionaryContent = dictionarySource;
+        } else {
+          const resolvedCharactersPath = path.resolve(
+            process.cwd(),
+            dictionarySource
+          );
+          this.log(
+            `Loading character dictionary from: ${resolvedCharactersPath}`
+          );
+          dictionaryContent = readFileSync(resolvedCharactersPath, "utf-8");
+        }
       } else {
         this.log(`Loading character dictionary from ArrayBuffer`);
         dictionaryContent = Buffer.from(dictionarySource).toString("utf-8");
