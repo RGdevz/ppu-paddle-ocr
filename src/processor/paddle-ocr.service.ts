@@ -3,6 +3,7 @@ import * as ort from "onnxruntime-node";
 import * as path from "path";
 import { Canvas, ImageProcessor } from "ppu-ocv";
 
+import merge from "lodash.merge";
 import { DEFAULT_PADDLE_OPTIONS } from "../constants";
 
 import type { PaddleOptions } from "../interface";
@@ -32,7 +33,7 @@ export interface FlattenedPaddleOcrResult {
  */
 export class PaddleOcrService {
   private static instance: PaddleOcrService | null = null;
-  private options: PaddleOptions;
+  private options: PaddleOptions = DEFAULT_PADDLE_OPTIONS;
 
   private detectionSession: ort.InferenceSession | null = null;
   private recognitionSession: ort.InferenceSession | null = null;
@@ -42,10 +43,7 @@ export class PaddleOcrService {
    * @param options Optional configuration options
    */
   constructor(options?: PaddleOptions) {
-    this.options = {
-      ...DEFAULT_PADDLE_OPTIONS,
-      ...options,
-    };
+    this.options = merge({}, DEFAULT_PADDLE_OPTIONS, options);
   }
 
   /**
@@ -65,22 +63,19 @@ export class PaddleOcrService {
     overrideOptions?: Partial<PaddleOptions>
   ): Promise<void> {
     try {
-      const effectiveOptions = {
-        ...this.options,
-        ...overrideOptions,
-      };
+      const effectiveOptions = merge({}, this.options, overrideOptions);
 
       const resolvedDetectionPath = path.resolve(
         process.cwd(),
-        effectiveOptions.model!.detection
+        effectiveOptions.model!.detection || ""
       );
       const resolvedRecognitionPath = path.resolve(
         process.cwd(),
-        effectiveOptions.model!.recognition
+        effectiveOptions.model!.recognition || ""
       );
       const resolvedCharactersPath = path.resolve(
         process.cwd(),
-        effectiveOptions.model!.charactersDictionary
+        effectiveOptions.model!.charactersDictionary || ""
       );
 
       this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);

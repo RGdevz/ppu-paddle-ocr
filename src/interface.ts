@@ -6,19 +6,19 @@ export interface ModelPathOptions {
    * Filesystem path to the text detection model file.
    * Required if not using the library's built‑in default model.
    */
-  detection: string;
+  detection?: string;
 
   /**
    * Filesystem path to the text recognition model file.
    * Required if not using the library's built‑in default model.
    */
-  recognition: string;
+  recognition?: string;
 
   /**
    * Filesystem path to the character dictionary file.
    * Required if not using the library's built‑in default dictionary (en_dict.txt).
    */
-  charactersDictionary: string;
+  charactersDictionary?: string;
 }
 
 /**
