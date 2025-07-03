@@ -40,7 +40,14 @@ export class DeskewService {
    */
   async calculateSkewAngle(probabilityMapCanvas: Canvas): Promise<number> {
     const processor = new ImageProcessor(probabilityMapCanvas);
-    const mat = processor.grayscale().threshold().toMat();
+    const mat = processor
+      .grayscale()
+      .threshold({
+        lower: 0,
+        upper: 255,
+        type: cv.THRESH_BINARY + cv.THRESH_OTSU,
+      })
+      .toMat();
 
     const contours = new Contours(mat, {
       mode: cv.RETR_LIST,
@@ -354,10 +361,13 @@ export class DeskewService {
     );
     const weightedAverage = weightedSum / totalWeight;
 
-    const methodCounts = filteredAngles.reduce((counts, a) => {
-      counts[a.method] = (counts[a.method] || 0) + 1;
-      return counts;
-    }, {} as Record<string, number>);
+    const methodCounts = filteredAngles.reduce(
+      (counts, a) => {
+        counts[a.method] = (counts[a.method] || 0) + 1;
+        return counts;
+      },
+      {} as Record<string, number>
+    );
 
     this.log(
       `Angle methods used: ${Object.entries(methodCounts)

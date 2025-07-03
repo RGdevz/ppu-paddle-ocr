@@ -10,7 +10,6 @@ OCR should be as easy as:
 import { PaddleOcrService } from "ppu-paddle-ocr";
 
 const service = await PaddleOcrService.getInstance();
-
 const result = await service.recognize(fileBufferOrCanvas);
 
 service.destroy();

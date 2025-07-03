@@ -350,6 +350,25 @@ export class PaddleOcrService {
   }
 
   /**
+   * Runs deskew algorithm on the provided image buffer | canvas
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @return A promise that resolves deskewed image as Canvas
+   */
+  public async deskewImage(image: ArrayBuffer | Canvas): Promise<Canvas> {
+    await ImageProcessor.initRuntime();
+
+    const detector = new DetectionService(
+      this.detectionSession!,
+      this.options.detection,
+      this.options.debugging
+    );
+
+    const detection = await detector.deskew(image);
+    return detection;
+  }
+
+  /**
    * Releases the onnx runtime session for both
    * detection and recognition model.
    */

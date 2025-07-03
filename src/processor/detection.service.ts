@@ -86,7 +86,7 @@ export class DetectionService {
           `Detected skew angle: ${angle.toFixed(
             2
           )}°. Rotating image at ${-angle.toFixed(2)}° (to ${
-            -angle > 1 ? "left" : "right"
+            -angle > 1 ? "right" : "left"
           })...`
         );
 
@@ -134,6 +134,44 @@ export class DetectionService {
       );
       return [];
     }
+  }
+
+  /**
+   * Atomic method to run image deskewing
+   * @param image ArrayBuffer of the image or Canvas
+   */
+  async deskew(image: ArrayBuffer | Canvas): Promise<Canvas> {
+    this.log("Starting image deskewing process");
+
+    let canvasToProcess =
+      image instanceof Canvas
+        ? image
+        : await ImageProcessor.prepareCanvas(image);
+
+    this.log("Performing initial pass for angle detection.");
+    const angle = await this.calculateSkewAngle(canvasToProcess);
+
+    this.log(
+      `Detected skew angle: ${angle.toFixed(
+        2
+      )}°. Rotating image at ${-angle.toFixed(2)}° (to ${
+        -angle > 1 ? "right" : "left"
+      })...`
+    );
+
+    const processor = new ImageProcessor(canvasToProcess);
+    const rotatedCanvas = processor.rotate({ angle }).toCanvas();
+    processor.destroy();
+
+    if (this.debugging.debug) {
+      await CanvasToolkit.getInstance().saveImage({
+        canvas: rotatedCanvas,
+        filename: "deskewed-image-debug",
+        path: this.debugging.debugFolder!,
+      });
+    }
+
+    return rotatedCanvas;
   }
 
   /**
