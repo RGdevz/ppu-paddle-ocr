@@ -10,7 +10,6 @@ OCR should be as easy as:
 import { PaddleOcrService } from "ppu-paddle-ocr";
 
 const service = await PaddleOcrService.getInstance();
-
 const result = await service.recognize(fileBufferOrCanvas);
 
 service.destroy();
@@ -32,6 +31,7 @@ Built on top of `onnxruntime-node`, ppu-paddle-ocr handles all the complexity of
 4. **Customizable**: Support for custom models and dictionaries
 5. **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use
 6. **TypeScript Support**: Full TypeScript definitions for enhanced developer experience
+7. **Auto Deskew**: Using multiple text analysis to straighten the image
 
 ## Installation
 
@@ -151,6 +151,7 @@ Controls preprocessing and filtering parameters during text detection.
 
 | Property               |            Type            |         Default         | Description                                                      |
 | :--------------------- | :------------------------: | :---------------------: | :--------------------------------------------------------------- |
+| `autoDeskew`           |         `boolean`          |         `True`          | Correct orientation using multiple text analysis.                |
 | `mean`                 | `[number, number, number]` | `[0.485, 0.456, 0.406]` | Per-channel mean values for input normalization [R, G, B].       |
 | `stdDeviation`         | `[number, number, number]` | `[0.229, 0.224, 0.225]` | Per-channel standard deviation values for input normalization.   |
 | `maxSideLength`        |          `number`          |          `960`          | Maximum dimension (longest side) for input images (px).          |

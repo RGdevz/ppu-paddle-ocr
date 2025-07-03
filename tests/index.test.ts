@@ -1,0 +1,150 @@
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import { PaddleOcrService } from "../src/processor/paddle-ocr.service";
+
+import dict from "../src/models/en_dict.txt" with { type: "file", embed: "true" };
+import recModel from "../src/models/en_PP-OCRv4_mobile_rec_infer.onnx" with { type: "file", embed: "true" };
+import detModel from "../src/models/PP-OCRv5_mobile_det_infer.onnx" with { type: "file", embed: "true" };
+
+const imgFile = Bun.file("./assets/receipt.jpg");
+const imageBuffer = await imgFile.arrayBuffer();
+
+describe("PaddleOcrService Initialization", () => {
+  let service: PaddleOcrService | null = null;
+
+  afterEach(async () => {
+    if (service) {
+      await service.destroy();
+      service = null;
+    }
+  });
+
+  test("should initialize and recognize using explicit file paths", async () => {
+    service = new PaddleOcrService();
+    await service.initialize({
+      model: {
+        detection: detModel,
+        recognition: recModel,
+        charactersDictionary: dict,
+      },
+    });
+
+    expect(service.isInitialized()).toBe(true);
+
+    const result = await service.recognize(imageBuffer);
+    expect(result.text).not.toBeEmpty();
+    expect(result.confidence).toBeGreaterThan(0.8); 
+  });
+
+  test("should initialize and recognize from ArrayBuffer inputs", async () => {
+    const detBuffer = await Bun.file(detModel).arrayBuffer();
+    const recBuffer = await Bun.file(recModel).arrayBuffer();
+    const dictBuffer = await Bun.file(dict).arrayBuffer();
+
+    expect(detBuffer.byteLength).toBeGreaterThan(0);
+    expect(recBuffer.byteLength).toBeGreaterThan(0);
+    expect(dictBuffer.byteLength).toBeGreaterThan(0);
+
+    service = new PaddleOcrService();
+    await service.initialize({
+      model: {
+        detection: detBuffer,
+        recognition: recBuffer,
+        charactersDictionary: dictBuffer,
+      },
+    });
+
+    expect(service.isInitialized()).toBe(true);
+
+    const result = await service.recognize(imageBuffer);
+    expect(result.text).not.toBeEmpty();
+    expect(result.confidence).toBeGreaterThan(0.8);
+  });
+});
+
+describe("PaddleOcrService.recognize() (using default singleton)", () => {
+  let service: PaddleOcrService;
+
+  beforeAll(async () => {
+    service = await PaddleOcrService.getInstance();
+  });
+
+  afterAll(async () => {
+    await service.destroy();
+  });
+
+  test("should return grouped results by default (flatten: false)", async () => {
+    const result = await service.recognize(imageBuffer);
+
+    expect(result).toBeObject();
+    expect(result).toHaveProperty("text");
+    expect(result).toHaveProperty("lines");
+    expect(result).toHaveProperty("confidence");
+    expect(result).not.toHaveProperty("results"); 
+
+    expect(result.text).toBeString();
+    expect(result.confidence).toBeNumber();
+    expect(result.confidence).toBeGreaterThan(0);
+    expect(result.lines).toBeArray();
+    expect(result.lines.length).toBeGreaterThan(0); 
+
+    const firstLine = result.lines[0];
+    expect(firstLine).toBeArray();
+    expect(firstLine!.length).toBeGreaterThan(0);
+
+    const firstItem = firstLine![0];
+    expect(firstItem).toBeObject();
+    expect(firstItem).toHaveProperty("text");
+    expect(firstItem).toHaveProperty("box");
+
+    expect(firstItem).toHaveProperty("confidence");
+    expect(firstItem!.confidence).toBeNumber();
+    expect(firstItem!.box).toHaveProperty("x");
+  });
+
+  test("should return flattened results when flatten option is true", async () => {
+    const result = await service.recognize(imageBuffer, { flatten: true });
+
+    expect(result).toBeObject();
+    expect(result).toHaveProperty("text");
+    expect(result).toHaveProperty("results"); 
+    expect(result).toHaveProperty("confidence");
+    expect(result).not.toHaveProperty("lines"); 
+
+    expect(result.text).toBeString();
+    expect(result.confidence).toBeNumber();
+    expect(result.confidence).toBeGreaterThan(0);
+    expect(result.results).toBeArray();
+    expect(result.results.length).toBeGreaterThan(0);
+
+    if (result.results.length > 0) {
+      expect(result.results[0]).not.toBeArray();
+    }
+
+    const firstItem = result.results[0];
+    expect(firstItem).toBeObject();
+    expect(firstItem).toHaveProperty("text");
+    expect(firstItem).toHaveProperty("box");
+    expect(firstItem).toHaveProperty("confidence");
+    expect(firstItem!.confidence).toBeNumber();
+  });
+
+  test("should return consistent data between grouped and flattened modes", async () => {
+    const groupedResult = await service.recognize(imageBuffer);
+    const flattenedResult = await service.recognize(imageBuffer, {
+      flatten: true,
+    });
+
+    expect(flattenedResult.confidence).toBe(groupedResult.confidence);
+    expect(flattenedResult.text).toBe(groupedResult.text);
+
+    const groupedItemCount = groupedResult.lines.flat().length;
+    expect(flattenedResult.results.length).toBe(groupedItemCount);
+  });
+});

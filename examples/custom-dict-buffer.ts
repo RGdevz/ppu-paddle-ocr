@@ -1,0 +1,27 @@
+import { PaddleOcrService } from "../src";
+// import { PaddleOcrService } from "ppu-paddle-ocr";
+
+import dict from "../examples/custom-dict.txt" with { type: "file", embed: "true" };
+
+const service = await PaddleOcrService.getInstance({
+  debugging: {
+    debug: true,
+    verbose: true,
+  },
+  model: {
+    charactersDictionary: await Bun.file(dict).arrayBuffer()
+  },
+});
+
+const imagePath = "./assets/receipt.jpg";
+const imgFile = Bun.file(imagePath);
+const fileBuffer = await imgFile.arrayBuffer();
+
+const startTime = Date.now();
+const result = await service.recognize(fileBuffer);
+const speed = Date.now() - startTime;
+
+service.destroy();
+
+console.log(JSON.stringify(result, null, 2));
+console.log(`Operation completed in ${speed} ms`);

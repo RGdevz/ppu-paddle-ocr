@@ -12,6 +12,7 @@ import {
   DEFAULT_DETECTION_OPTIONS,
 } from "../constants";
 import type { Box, DebuggingOptions, DetectionOptions } from "../interface";
+import { DeskewService } from "./deskew.service";
 
 /**
  * Result of preprocessing an image for text detection
@@ -70,7 +71,41 @@ export class DetectionService {
     this.log("Starting text detection process");
 
     try {
-      const input = await this.preprocessDetection(image);
+      let canvasToProcess =
+        image instanceof Canvas
+          ? image
+          : await ImageProcessor.prepareCanvas(image);
+
+      if (this.options.autoDeskew) {
+        this.log(
+          "Auto-deskew enabled. Performing initial pass for angle detection."
+        );
+        const angle = await this.calculateSkewAngle(canvasToProcess);
+
+        this.log(
+          `Detected skew angle: ${angle.toFixed(
+            2
+          )}°. Rotating image at ${-angle.toFixed(2)}° (to ${
+            -angle > 1 ? "right" : "left"
+          })...`
+        );
+
+        const processor = new ImageProcessor(canvasToProcess);
+        const rotatedCanvas = processor.rotate({ angle }).toCanvas();
+        processor.destroy();
+
+        canvasToProcess = rotatedCanvas;
+
+        if (this.debugging.debug) {
+          await CanvasToolkit.getInstance().saveImage({
+            canvas: canvasToProcess,
+            filename: "deskewed-image-debug",
+            path: this.debugging.debugFolder!,
+          });
+        }
+      }
+
+      const input = await this.preprocessDetection(canvasToProcess);
       const detection = await this.runInference(
         input.tensor,
         input.width,
@@ -86,7 +121,7 @@ export class DetectionService {
 
       if (this.debugging.debug) {
         await this.debugDetectionCanvas(detection, input.width, input.height);
-        await this.debugDetectedBoxes(image, detectedBoxes);
+        await this.debugDetectedBoxes(canvasToProcess, detectedBoxes);
       }
 
       this.log(`Detected ${detectedBoxes.length} text boxes in image`);
@@ -102,17 +137,86 @@ export class DetectionService {
   }
 
   /**
-   * Preprocess an image for text detection
+   * Atomic method to run image deskewing
+   * @param image ArrayBuffer of the image or Canvas
    */
-  private async preprocessDetection(
-    image: ArrayBuffer | Canvas
-  ): Promise<PreprocessDetectionResult> {
-    const initialCanvas =
+  async deskew(image: ArrayBuffer | Canvas): Promise<Canvas> {
+    this.log("Starting image deskewing process");
+
+    let canvasToProcess =
       image instanceof Canvas
         ? image
         : await ImageProcessor.prepareCanvas(image);
 
-    const { width: originalWidth, height: originalHeight } = initialCanvas;
+    this.log("Performing initial pass for angle detection.");
+    const angle = await this.calculateSkewAngle(canvasToProcess);
+
+    this.log(
+      `Detected skew angle: ${angle.toFixed(
+        2
+      )}°. Rotating image at ${-angle.toFixed(2)}° (to ${
+        -angle > 1 ? "right" : "left"
+      })...`
+    );
+
+    const processor = new ImageProcessor(canvasToProcess);
+    const rotatedCanvas = processor.rotate({ angle }).toCanvas();
+    processor.destroy();
+
+    if (this.debugging.debug) {
+      await CanvasToolkit.getInstance().saveImage({
+        canvas: rotatedCanvas,
+        filename: "deskewed-image-debug",
+        path: this.debugging.debugFolder!,
+      });
+    }
+
+    return rotatedCanvas;
+  }
+
+  /**
+   * Runs a lightweight detection pass to determine the average text skew angle.
+   * Uses multiple methods to robustly calculate skew from all detected text regions.
+   * @param canvas The input canvas.
+   * @returns The calculated skew angle in degrees.
+   */
+  private async calculateSkewAngle(canvas: Canvas): Promise<number> {
+    const input = await this.preprocessDetection(canvas);
+    const detection = await this.runInference(
+      input.tensor,
+      input.width,
+      input.height
+    );
+
+    if (!detection) {
+      this.log("Skew calculation failed: no detection output from model.");
+      return 0;
+    }
+
+    const { width, height } = input;
+    const probabilityMapCanvas = this.tensorToCanvas(detection, width, height);
+
+    if (this.debugging.debug) {
+      await CanvasToolkit.getInstance().saveImage({
+        canvas: probabilityMapCanvas,
+        filename: "deskew-probability-map-debug.png",
+        path: this.debugging.debugFolder!,
+      });
+    }
+
+    const deskewService = new DeskewService(this.options, this.debugging);
+
+    const result = await deskewService.calculateSkewAngle(probabilityMapCanvas);
+    return result;
+  }
+
+  /**
+   * Preprocess an image for text detection
+   */
+  private async preprocessDetection(
+    canvas: Canvas
+  ): Promise<PreprocessDetectionResult> {
+    const { width: originalWidth, height: originalHeight } = canvas;
 
     const {
       width: resizeW,
@@ -120,7 +224,7 @@ export class DetectionService {
       ratio: resizeRatio,
     } = this.calculateResizeDimensions(originalWidth, originalHeight);
 
-    const processor = new ImageProcessor(initialCanvas);
+    const processor = new ImageProcessor(canvas);
     const resizedCanvas = processor
       .resize({ width: resizeW, height: resizeH })
       .toCanvas();

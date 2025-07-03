@@ -3,22 +3,22 @@
  */
 export interface ModelPathOptions {
   /**
-   * Filesystem path to the text detection model file.
+   * Onnx file buffer or path for the text detection model.
    * Required if not using the library's built‑in default model.
    */
-  detection: string;
+  detection?: ArrayBuffer | string;
 
   /**
-   * Filesystem path to the text recognition model file.
+   * Onnx file buffer or path for the text recognition model.
    * Required if not using the library's built‑in default model.
    */
-  recognition: string;
+  recognition?: ArrayBuffer | string;
 
   /**
-   * Filesystem path to the character dictionary file.
+   * Onnx file buffer or path for the character dictionary.
    * Required if not using the library's built‑in default dictionary (en_dict.txt).
    */
-  charactersDictionary: string;
+  charactersDictionary?: ArrayBuffer | string;
 }
 
 /**
@@ -49,6 +49,13 @@ export interface DebuggingOptions {
  * Parameters for the text detection preprocessing and filtering stage.
  */
 export interface DetectionOptions {
+  /**
+   * Whether to enable automatic deskewing of the image.
+   * This may run detection twice, increasing processing time but improving accuracy on skewed images.
+   * @default true
+   */
+  autoDeskew?: boolean;
+
   /**
    * Per-channel mean values used to normalize input pixels [R, G, B].
    * @default [0.485, 0.456, 0.406]

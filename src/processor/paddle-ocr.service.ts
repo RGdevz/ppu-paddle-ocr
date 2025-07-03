@@ -3,6 +3,7 @@ import * as ort from "onnxruntime-node";
 import * as path from "path";
 import { Canvas, ImageProcessor } from "ppu-ocv";
 
+import merge from "lodash.merge";
 import { DEFAULT_PADDLE_OPTIONS } from "../constants";
 
 import type { PaddleOptions } from "../interface";
@@ -15,6 +16,13 @@ import {
 export interface PaddleOcrResult {
   text: string;
   lines: RecognitionResult[][];
+  confidence: number;
+}
+
+export interface FlattenedPaddleOcrResult {
+  text: string;
+  results: RecognitionResult[];
+  confidence: number;
 }
 
 /**
@@ -25,7 +33,7 @@ export interface PaddleOcrResult {
  */
 export class PaddleOcrService {
   private static instance: PaddleOcrService | null = null;
-  private options: PaddleOptions;
+  private options: PaddleOptions = DEFAULT_PADDLE_OPTIONS;
 
   private detectionSession: ort.InferenceSession | null = null;
   private recognitionSession: ort.InferenceSession | null = null;
@@ -35,10 +43,7 @@ export class PaddleOcrService {
    * @param options Optional configuration options
    */
   constructor(options?: PaddleOptions) {
-    this.options = {
-      ...DEFAULT_PADDLE_OPTIONS,
-      ...options,
-    };
+    this.options = merge({}, DEFAULT_PADDLE_OPTIONS, options);
   }
 
   /**
@@ -58,80 +63,100 @@ export class PaddleOcrService {
     overrideOptions?: Partial<PaddleOptions>
   ): Promise<void> {
     try {
-      const effectiveOptions = {
-        ...this.options,
-        ...overrideOptions,
-      };
+      const effectiveOptions = merge({}, this.options, overrideOptions);
 
-      const resolvedDetectionPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.detection
-      );
-      const resolvedRecognitionPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.recognition
-      );
-      const resolvedCharactersPath = path.resolve(
-        process.cwd(),
-        effectiveOptions.model!.charactersDictionary
-      );
-
-      this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
-
-      const detModelBuffer = readFileSync(resolvedDetectionPath).buffer;
-      this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
-      await new Promise((resolve) => setImmediate(resolve));
-
-      this.log(
-        `Detection ONNX model loaded successfully\n\tLoading Recognition ONNX model from: ${resolvedRecognitionPath}`
-      );
-
-      this.log(
-        `input: ${this.detectionSession.inputNames}\n\toutput: ${
-          this.detectionSession.outputNames
-        }\n\tinputMetadata: ${JSON.stringify(
-          this.detectionSession.inputMetadata
-        )}\n\toutputMetadata: ${JSON.stringify(
-          this.detectionSession.outputMetadata
-        )}`
-      );
-
-      const recModelBuffer = readFileSync(resolvedRecognitionPath).buffer;
-      this.recognitionSession = await ort.InferenceSession.create(
-        recModelBuffer
-      );
-      await new Promise((resolve) => setImmediate(resolve));
-
-      this.log(
-        `Recognition ONNX model loaded successfully\n\tinput: ${
-          this.recognitionSession.inputNames
-        }\n\toutput: ${
-          this.recognitionSession.outputNames
-        }\n\tinputMetadata: ${JSON.stringify(
-          this.recognitionSession.inputMetadata
-        )}\n\toutputMetadata: ${JSON.stringify(
-          this.recognitionSession.outputMetadata
-        )}`
-      );
-
-      this.log(`Loading character dictionary from: ${resolvedCharactersPath}`);
-      const charactersDictionary = readFileSync(
-        resolvedCharactersPath,
-        "utf-8"
-      ).split("\n");
-
-      if (!charactersDictionary.length) {
+      const detectionModel = effectiveOptions.model?.detection;
+      if (!detectionModel) {
         throw new Error(
-          `Character dictionary at ${resolvedCharactersPath} is empty or not found.`
+          "A detection model path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
+
+      if (typeof detectionModel === "string") {
+        const resolvedDetectionPath = path.resolve(
+          process.cwd(),
+          detectionModel
+        );
+        this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
+        const modelBuffer = readFileSync(resolvedDetectionPath).buffer;
+        this.detectionSession = await ort.InferenceSession.create(modelBuffer);
+      } else {
+        this.log(`Loading Detection ONNX model from ArrayBuffer`);
+        this.detectionSession =
+          await ort.InferenceSession.create(detectionModel);
+      }
+
+      this.log(
+        `Detection ONNX model loaded successfully\n\tinput: ${this.detectionSession.inputNames}\n\toutput: ${this.detectionSession.outputNames}`
+      );
+
+      const recognitionModel = effectiveOptions.model?.recognition;
+      if (!recognitionModel) {
+        throw new Error(
+          "A recognition model path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
+
+      if (typeof recognitionModel === "string") {
+        const resolvedRecognitionPath = path.resolve(
+          process.cwd(),
+          recognitionModel
+        );
+        this.log(
+          `Loading Recognition ONNX model from: ${resolvedRecognitionPath}`
+        );
+        const modelBuffer = readFileSync(resolvedRecognitionPath).buffer;
+        this.recognitionSession =
+          await ort.InferenceSession.create(modelBuffer);
+      } else {
+        this.log(`Loading Recognition ONNX model from ArrayBuffer`);
+        this.recognitionSession =
+          await ort.InferenceSession.create(recognitionModel);
+      }
+
+      this.log(
+        `Recognition ONNX model loaded successfully\n\tinput: ${this.recognitionSession.inputNames}\n\toutput: ${this.recognitionSession.outputNames}`
+      );
+
+      const dictionarySource = effectiveOptions.model?.charactersDictionary;
+      if (!dictionarySource) {
+        throw new Error(
+          "A character dictionary path (string) or ArrayBuffer must be provided in the options."
+        );
+      }
+
+      let dictionaryContent: string;
+      if (typeof dictionarySource === "string") {
+        const isLikelyContent = dictionarySource.includes("\n");
+
+        if (isLikelyContent) {
+          dictionaryContent = dictionarySource;
+        } else {
+          const resolvedCharactersPath = path.resolve(
+            process.cwd(),
+            dictionarySource
+          );
+          this.log(
+            `Loading character dictionary from: ${resolvedCharactersPath}`
+          );
+          dictionaryContent = readFileSync(resolvedCharactersPath, "utf-8");
+        }
+      } else {
+        this.log(`Loading character dictionary from ArrayBuffer`);
+        dictionaryContent = Buffer.from(dictionarySource).toString("utf-8");
+      }
+
+      const charactersDictionary = dictionaryContent.split("\n");
+
+      if (charactersDictionary.length === 0) {
+        throw new Error(
+          "Character dictionary is empty or could not be loaded."
         );
       }
 
       this.options.recognition!.charactersDictionary = charactersDictionary;
-
       this.log(
-        `Character dictionary loaded with ${
-          this.options.recognition?.charactersDictionary.length || 0
-        } entries.`
+        `Character dictionary loaded with ${charactersDictionary.length} entries.`
       );
     } catch (error) {
       console.error("Failed to initialize PaddleOcrService:", error);
@@ -146,7 +171,6 @@ export class PaddleOcrService {
    * @example
    * const service = await PaddleOcrService.getInstance({
    *   verbose: true,
-   *   detectionModelPath: './models/myDetection.onnx'
    * });
    */
   public static async getInstance(
@@ -201,16 +225,41 @@ export class PaddleOcrService {
   }
 
   /**
+   * Runs OCR and returns a flattened list of recognized text boxes.
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @param options - Options object with `flatten` set to `true`.
+   * @return A promise that resolves to a flattened result object.
+   */
+  public recognize(
+    image: ArrayBuffer | Canvas,
+    options: { flatten: true }
+  ): Promise<FlattenedPaddleOcrResult>;
+
+  /**
+   * Runs OCR and returns recognized text grouped into lines.
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @param options - Optional options object. If `flatten` is `false` or omitted, this structure is returned.
+   * @return A promise that resolves to a result object with text lines.
+   */
+  public recognize(
+    image: ArrayBuffer | Canvas,
+    options?: { flatten?: false }
+  ): Promise<PaddleOcrResult>;
+
+  /**
    * Runs object detection on the provided image buffer, then performs
    * recognition on the detected regions.
    *
    * @param image - The raw image data as an ArrayBuffer or Canvas.
-   * @return A promise that resolves to an array of RecognitionResult objects,
-   *          one for each detected and recognized region.
+   * @param options - Optional configuration for the recognition output, e.g., `{ flatten: true }`.
+   * @return A promise that resolves to the OCR result, either grouped by lines or as a flat list.
    */
   public async recognize(
-    image: ArrayBuffer | Canvas
-  ): Promise<PaddleOcrResult> {
+    image: ArrayBuffer | Canvas,
+    options?: { flatten?: boolean }
+  ): Promise<PaddleOcrResult | FlattenedPaddleOcrResult> {
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(
@@ -227,26 +276,45 @@ export class PaddleOcrService {
     const detection = await detector.run(image);
     const recognition = await recognitor.run(image, detection);
 
-    return this.groupResult(recognition);
+    const processed = this.processRecognition(recognition);
+
+    if (options?.flatten) {
+      return {
+        text: processed.text,
+        results: recognition,
+        confidence: processed.confidence,
+      };
+    }
+
+    return processed;
   }
 
   /**
-   * Groups recognition results into lines based on their vertical positions
-   * and returns the full text and organized lines efficiently.
+   * Processes raw recognition results to generate the final text,
+   * grouped lines, and overall confidence.
    */
-  private groupResult(recognition: RecognitionResult[]): PaddleOcrResult {
+  private processRecognition(
+    recognition: RecognitionResult[]
+  ): PaddleOcrResult {
     const result: PaddleOcrResult = {
       text: "",
       lines: [],
+      confidence: 0,
     };
 
     if (!recognition.length) {
       return result;
     }
 
+    // Calculate overall confidence as the average of all individual confidences
+    const totalConfidence = recognition.reduce(
+      (sum, r) => sum + r.confidence,
+      0
+    );
+    result.confidence = totalConfidence / recognition.length;
+
     let currentLine: RecognitionResult[] = [recognition[0]];
     let fullText = recognition[0].text;
-
     let avgHeight = recognition[0].box.height;
 
     for (let i = 1; i < recognition.length; i++) {
@@ -279,6 +347,25 @@ export class PaddleOcrService {
 
     result.text = fullText;
     return result;
+  }
+
+  /**
+   * Runs deskew algorithm on the provided image buffer | canvas
+   *
+   * @param image - The raw image data as an ArrayBuffer or Canvas.
+   * @return A promise that resolves deskewed image as Canvas
+   */
+  public async deskewImage(image: ArrayBuffer | Canvas): Promise<Canvas> {
+    await ImageProcessor.initRuntime();
+
+    const detector = new DetectionService(
+      this.detectionSession!,
+      this.options.detection,
+      this.options.debugging
+    );
+
+    const detection = await detector.deskew(image);
+    return detection;
   }
 
   /**
