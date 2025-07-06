@@ -1,3 +1,4 @@
+import { ImageProcessor } from "ppu-ocv";
 import { PaddleOcrService } from "../src/";
 // import { PaddleOcrService } from "ppu-paddle-ocr";
 
@@ -12,8 +13,14 @@ const imagePath = "./assets/receipt.jpg";
 const imgFile = Bun.file(imagePath);
 const fileBuffer = await imgFile.arrayBuffer();
 
+let canvas = await ImageProcessor.prepareCanvas(fileBuffer);
+const processor = new ImageProcessor(canvas);
+
+canvas = processor.grayscale().blur().toCanvas();
+processor.destroy();
+
 const startTime = Date.now();
-const result = await service.recognize(fileBuffer);
+const result = await service.recognize(canvas);
 const speed = Date.now() - startTime;
 
 service.destroy();

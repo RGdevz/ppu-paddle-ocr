@@ -17,6 +17,17 @@ service.destroy();
 
 You can combine it further by using open-cv https://github.com/PT-Perkasa-Pilar-Utama/ppu-ocv for more improved accuracy.
 
+#### Paddle works best with grayscale/thresholded image
+
+```ts
+import { ImageProcessor } from "ppu-ocv";
+const processor = new ImageProcessor(bodyCanvas);
+processor.grayscale().blur();
+
+const canvas = processor.toCanvas();
+processor.destroy();
+```
+
 ## Description
 
 ppu-paddle-ocr brings the powerful PaddleOCR optical character recognition capabilities to JavaScript environments. This library simplifies the integration of ONNX models with Node.js applications, offering a lightweight solution for text detection and recognition without complex dependencies.
