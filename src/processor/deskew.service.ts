@@ -91,13 +91,25 @@ export class DeskewService {
       return 0;
     }
 
-    this.log(`Found ${textRegions.length} text regions for skew analysis.`);
+    // filter out text regions that has height more than average text region height
+    const averageHeight =
+      textRegions.reduce((sum, region) => sum + region.rect.height, 0) /
+      textRegions.length;
+
+    const filteredRegions = textRegions.filter((region) => {
+      return region.rect.height <= averageHeight * 1.5; // Allow some tolerance
+    });
+
+    this.log(`Found ${filteredRegions.length} text regions for skew analysis.`);
 
     // Method 1: Analyze angles using minimum area rectangles
-    const minRectAngles = this.calculateMinRectAngles(textRegions, contours);
+    const minRectAngles = this.calculateMinRectAngles(
+      filteredRegions,
+      contours
+    );
 
     // Method 2: Analyze angles using line fitting on text baselines
-    const baselineAngles = this.calculateBaselineAngles(textRegions);
+    const baselineAngles = this.calculateBaselineAngles(filteredRegions);
 
     // Method 3: Analyze angles using Hough transform for dominant lines
     const houghAngles = this.calculateHoughAngles(mat, minAngle, maxAngle);
