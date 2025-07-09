@@ -284,7 +284,7 @@ export class PaddleOcrService {
    */
   public recognize(
     image: ArrayBuffer | Canvas,
-    options: { flatten: true }
+    options: { flatten: true; dictionary?: string | ArrayBuffer }
   ): Promise<FlattenedPaddleOcrResult>;
 
   /**
@@ -296,7 +296,7 @@ export class PaddleOcrService {
    */
   public recognize(
     image: ArrayBuffer | Canvas,
-    options?: { flatten?: false }
+    options?: { flatten?: false; dictionary?: string | ArrayBuffer }
   ): Promise<PaddleOcrResult>;
 
   /**
@@ -309,7 +309,7 @@ export class PaddleOcrService {
    */
   public async recognize(
     image: ArrayBuffer | Canvas,
-    options?: { flatten?: boolean }
+    options?: { flatten?: boolean; dictionary?: string | ArrayBuffer }
   ): Promise<PaddleOcrResult | FlattenedPaddleOcrResult> {
     if (!this.isInitialized()) {
       throw new Error(
@@ -329,8 +329,25 @@ export class PaddleOcrService {
       this.options.debugging
     );
 
+    let charactersDictionary: string[] | undefined;
+    if (options?.dictionary) {
+      const dictBuffer = await this._loadResource(options.dictionary, "");
+      const dictionaryContent = Buffer.from(dictBuffer).toString("utf-8");
+      charactersDictionary = dictionaryContent.split("\n");
+
+      if (charactersDictionary.length === 0) {
+        throw new Error(
+          "Custom character dictionary is empty or could not be loaded."
+        );
+      }
+    }
+
     const detection = await detector.run(image);
-    const recognition = await recognitor.run(image, detection);
+    const recognition = await recognitor.run(
+      image,
+      detection,
+      charactersDictionary
+    );
 
     const processed = this.processRecognition(recognition);
 

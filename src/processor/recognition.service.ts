@@ -57,11 +57,13 @@ export class RecognitionService {
    * Main method to run text recognition on an image with detected regions
    * @param image The original image buffer or image in Canvas
    * @param detection Array of bounding boxes from text detection
+   * @param charactersDictionary Optional custom character dictionary
    * @returns Array of recognition results with text and bounding box, sorted in reading order
    */
   async run(
     image: ArrayBuffer | Canvas,
-    detection: Box[]
+    detection: Box[],
+    charactersDictionary?: string[]
   ): Promise<RecognitionResult[]> {
     this.log("Starting text recognition process");
 
@@ -74,7 +76,8 @@ export class RecognitionService {
       const validBoxes = this.filterValidBoxes(detection);
       const results = await this.processBoxesInParallel(
         sourceCanvasForCrop,
-        validBoxes
+        validBoxes,
+        charactersDictionary
       );
 
       return this.sortResultsByReadingOrder(results);
@@ -101,7 +104,8 @@ export class RecognitionService {
    */
   private async processBoxesInParallel(
     sourceCanvas: Canvas,
-    boxData: Array<{ box: Box; index: number }>
+    boxData: Array<{ box: Box; index: number }>,
+    charactersDictionary?: string[]
   ): Promise<RecognitionResult[]> {
     const cropsDebugPath = this.debugging.debugFolder + "/crops";
     if (this.debugging.debug) {
@@ -109,7 +113,14 @@ export class RecognitionService {
     }
 
     const processingTasks = boxData.map(({ box, index }) =>
-      this.processBox(sourceCanvas, box, index, boxData.length, cropsDebugPath)
+      this.processBox(
+        sourceCanvas,
+        box,
+        index,
+        boxData.length,
+        cropsDebugPath,
+        charactersDictionary
+      )
     );
 
     const results = await Promise.all(processingTasks);
@@ -126,14 +137,16 @@ export class RecognitionService {
     box: Box,
     index: number,
     totalBoxes: number,
-    debugPath: string
+    debugPath: string,
+    charactersDictionary?: string[]
   ): Promise<RecognitionResult | null> {
     const start = Date.now();
 
     try {
       const cropCanvas = this.cropRegion(sourceCanvas, box);
       const { text: recognizedText, confidence } = await this.recognizeText(
-        cropCanvas
+        cropCanvas,
+        charactersDictionary
       );
 
       if (this.debugging.debug) {
@@ -238,7 +251,8 @@ export class RecognitionService {
    * Recognizes text in a cropped canvas region
    */
   private async recognizeText(
-    cropCanvas: Canvas
+    cropCanvas: Canvas,
+    charactersDictionary?: string[]
   ): Promise<{ text: string; confidence: number }> {
     const { imageTensor, tensorWidth, tensorHeight } =
       await this.preprocessImage(cropCanvas);
@@ -251,7 +265,7 @@ export class RecognitionService {
     ]);
 
     const results = await this.runInference(inputTensor);
-    return this.decodeResults(results);
+    return this.decodeResults(results, charactersDictionary);
   }
 
   /**
@@ -356,7 +370,10 @@ export class RecognitionService {
   /**
    * Decodes the results from the model output tensor
    */
-  private decodeResults(outputTensor: ort.Tensor): {
+  private decodeResults(
+    outputTensor: ort.Tensor,
+    charactersDictionary?: string[]
+  ): {
     text: string;
     confidence: number;
   } {
@@ -366,9 +383,11 @@ export class RecognitionService {
     const sequenceLength = outputShape[1];
     const numClasses = outputShape[2];
 
-    if (numClasses !== this.options.charactersDictionary.length) {
+    const dict = charactersDictionary || this.options.charactersDictionary;
+
+    if (numClasses !== dict.length) {
       console.warn(
-        `Warning: Model output classes (${numClasses}) does not match dictionary length (${this.options.charactersDictionary.length})`
+        `Warning: Model output classes (${numClasses}) does not match dictionary length (${dict.length})`
       );
     }
 
@@ -376,7 +395,7 @@ export class RecognitionService {
       outputData,
       sequenceLength,
       numClasses,
-      this.options.charactersDictionary
+      dict
     );
   }
 

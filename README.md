@@ -127,6 +127,24 @@ await service.changeTextDictionary("./models/new-dict.txt");
 
 See: [Example usage](./examples)
 
+#### Using a Custom Dictionary for a Single Recognition
+
+You can provide a custom dictionary for a single `recognize` call without changing the service's default dictionary. This is useful for one-off recognitions with special character sets.
+
+```ts
+// Initialize the service first
+const service = new PaddleOcrService();
+await service.initialize();
+
+// Use a custom dictionary for this specific call
+const result = await service.recognize("./assets/receipt.jpg", {
+  dictionary: "./models/new-dict.txt",
+});
+
+// The service's default dictionary remains unchanged for subsequent calls
+const anotherResult = await service.recognize("./assets/another-image.jpg");
+```
+
 ## Models
 
 ### `ppu-paddle-ocr` v2.x.x (Default)
