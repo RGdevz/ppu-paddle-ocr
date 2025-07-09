@@ -9,10 +9,11 @@ OCR should be as easy as:
 ```ts
 import { PaddleOcrService } from "ppu-paddle-ocr";
 
-const service = await PaddleOcrService.getInstance();
-const result = await service.recognize(fileBufferOrCanvas);
+const service = new PaddleOcrService();
+await service.initialize();
 
-service.destroy();
+const result = await service.recognize(fileBufferOrCanvas);
+await service.destroy();
 ```
 
 You can combine it further by using open-cv https://github.com/PT-Perkasa-Pilar-Utama/ppu-ocv for more improved accuracy.
@@ -40,7 +41,7 @@ Built on top of `onnxruntime-node`, ppu-paddle-ocr handles all the complexity of
 2.  **Easy Integration**: Simple API to detect and recognize text in images
 3.  **Cross-Platform**: Works in Node.js and Bun environments
 4.  **Customizable**: Support for custom models and dictionaries
-5.  **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use, with automatic fetching from GitHub.
+5.  **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use, with automatic fetching and caching on the first run.
 6.  **TypeScript Support**: Full TypeScript definitions for enhanced developer experience
 7.  **Auto Deskew**: Using multiple text analysis to straighten the image
 
@@ -63,19 +64,23 @@ bun add ppu-paddle-ocr
 
 ## Usage
 
-#### Basic Singleton Usage
+#### Basic Usage
 
-The service is designed as a singleton. Use `getInstance()` to get the service instance.
+To get started, create an instance of `PaddleOcrService` and call the `initialize()` method. This will download and cache the default models on the first run.
 
 ```ts
 import { PaddleOcrService } from "ppu-paddle-ocr";
 
-const service = await PaddleOcrService.getInstance({
+// Create a new instance of the service
+const service = new PaddleOcrService({
   debugging: {
     debug: false,
     verbose: true,
   },
 });
+
+// Initialize the service (this will download models on the first run)
+await service.initialize();
 
 const result = await service.recognize("./assets/receipt.jpg");
 console.log(result.text);
@@ -89,21 +94,26 @@ await service.destroy();
 You can provide custom models via file paths, URLs, or `ArrayBuffer`s during initialization. If no models are provided, the default models will be fetched from GitHub.
 
 ```ts
-const service = await PaddleOcrService.getInstance({
+const service = new PaddleOcrService({
   model: {
     detection: "./models/custom-det.onnx",
     recognition: "https://example.com/models/custom-rec.onnx",
     charactersDictionary: customDictArrayBuffer,
   },
 });
+
+// Don't forget to initialize the service
+await service.initialize();
 ```
 
 #### Changing Models and Dictionaries at Runtime
 
-You can dynamically change the models or dictionary on the singleton instance.
+You can dynamically change the models or dictionary on an initialized instance.
 
 ```ts
-const service = await PaddleOcrService.getInstance();
+// Initialize the service first
+const service = new PaddleOcrService();
+await service.initialize();
 
 // Change the detection model
 await service.changeDetectionModel("./models/new-det-model.onnx");
@@ -121,9 +131,9 @@ See: [Example usage](./examples)
 
 ### `ppu-paddle-ocr` v2.x.x (Default)
 
--   detection: `PP-OCRv5_mobile_det_infer.onnx`
--   recogniton: `en_PP-OCRv4_mobile_rec_infer.onnx`
--   dictionary: `en_dict.txt` (97 class)
+- detection: `PP-OCRv5_mobile_det_infer.onnx`
+- recogniton: `en_PP-OCRv4_mobile_rec_infer.onnx`
+- dictionary: `en_dict.txt` (97 class)
 
 See: [Models](./src/models/)
 See also: [How to convert paddle ocr model to onnx](./examples/convert-onnx.ipynb)
@@ -152,10 +162,10 @@ export interface PaddleOptions {
 
 Specifies paths, URLs, or buffers for the OCR models and dictionary files.
 
-| Property               |         Type          |           Required            | Description                                                      |
-| :--------------------- | :-------------------: | :---------------------------: | :--------------------------------------------------------------- |
-| `detection`            | `string \| ArrayBuffer` | **No** (uses default model)   | Path, URL, or buffer for the text detection model.               |
-| `recognition`          | `string \| ArrayBuffer` | **No** (uses default model)   | Path, URL, or buffer for the text recognition model.             |
+| Property               |          Type           |             Required             | Description                                           |
+| :--------------------- | :---------------------: | :------------------------------: | :---------------------------------------------------- |
+| `detection`            | `string \| ArrayBuffer` |   **No** (uses default model)    | Path, URL, or buffer for the text detection model.    |
+| `recognition`          | `string \| ArrayBuffer` |   **No** (uses default model)    | Path, URL, or buffer for the text recognition model.  |
 | `charactersDictionary` | `string \| ArrayBuffer` | **No** (uses default dictionary) | Path, URL, buffer, or content of the dictionary file. |
 
 > [!NOTE]
@@ -188,8 +198,8 @@ Controls parameters for the text recognition stage.
 
 Enable verbose logs and save intermediate images to help debug OCR pipelines.
 
-| Property      |   Type    | Default | Description                                              |
-| ------------- | :-------: | :-----: | :------------------------------------------------------- |
-| `verbose`     | `boolean` | `false` | Turn on detailed console logs of each processing step.   |
-| `debug`       | `boolean` | `false` | Write intermediate image frames to disk.                 |
-| `debugFolder` | `string`  | `
+| Property      |   Type    | Default | Description                                            |
+| ------------- | :-------: | :-----: | :----------------------------------------------------- |
+| `verbose`     | `boolean` | `false` | Turn on detailed console logs of each processing step. |
+| `debug`       | `boolean` | `false` | Write intermediate image frames to disk.               |
+| `debugFolder` | `string`  |    `    |

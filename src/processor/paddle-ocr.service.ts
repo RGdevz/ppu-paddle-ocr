@@ -70,12 +70,48 @@ export class PaddleOcrService {
       return readFileSync(cachePath).buffer;
     }
 
+    console.log(
+      `[PaddleOcrService] Downloading resource: ${fileName}\n` +
+        `                 Cached at: ${CACHE_DIR}`
+    );
     this.log(`Fetching resource from URL: ${url}`);
+
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch resource from ${url}`);
     }
-    const buffer = await response.arrayBuffer();
+    if (!response.body) {
+      throw new Error("Response body is null or undefined");
+    }
+
+    const contentLength = response.headers.get("Content-Length");
+    const totalLength = contentLength ? parseInt(contentLength, 10) : 0;
+    let receivedLength = 0;
+    const chunks: Uint8Array[] = [];
+
+    const reader = response.body.getReader();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      receivedLength += value.length;
+
+      if (totalLength > 0) {
+        const percentage = ((receivedLength / totalLength) * 100).toFixed(2);
+        process.stdout.write(`\rDownloading... ${percentage}%`);
+      }
+    }
+    process.stdout.write("\n"); // Move to the next line
+
+    const buffer = new Uint8Array(receivedLength);
+    let position = 0;
+    for (const chunk of chunks) {
+      buffer.set(chunk, position);
+      position += chunk.length;
+    }
 
     this.log(`Caching resource to: ${cachePath}`);
     if (!existsSync(CACHE_DIR)) {
@@ -83,7 +119,7 @@ export class PaddleOcrService {
     }
     writeFileSync(cachePath, Buffer.from(buffer));
 
-    return buffer;
+    return buffer.buffer;
   }
 
   /**

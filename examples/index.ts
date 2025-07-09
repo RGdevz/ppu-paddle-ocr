@@ -1,4 +1,3 @@
-import { ImageProcessor } from "ppu-ocv";
 import { PaddleOcrService } from "../src";
 // import { PaddleOcrService } from "ppu-paddle-ocr";
 
@@ -22,4 +21,3 @@ service.destroy();
 
 console.log(JSON.stringify(result, null, 2));
 console.log(`Operation completed in ${speed} ms`);
-
