@@ -36,13 +36,13 @@ Built on top of `onnxruntime-node`, ppu-paddle-ocr handles all the complexity of
 
 ### Why use this library?
 
-1. **Lightweight**: Optimized for performance with minimal dependencies
-2. **Easy Integration**: Simple API to detect and recognize text in images
-3. **Cross-Platform**: Works in Node.js and Bun environments
-4. **Customizable**: Support for custom models and dictionaries
-5. **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use
-6. **TypeScript Support**: Full TypeScript definitions for enhanced developer experience
-7. **Auto Deskew**: Using multiple text analysis to straighten the image
+1.  **Lightweight**: Optimized for performance with minimal dependencies
+2.  **Easy Integration**: Simple API to detect and recognize text in images
+3.  **Cross-Platform**: Works in Node.js and Bun environments
+4.  **Customizable**: Support for custom models and dictionaries
+5.  **Pre-packed Models**: Includes optimized PaddleOCR models ready for immediate use, with automatic fetching from GitHub.
+6.  **TypeScript Support**: Full TypeScript definitions for enhanced developer experience
+7.  **Auto Deskew**: Using multiple text analysis to straighten the image
 
 ## Installation
 
@@ -55,80 +55,86 @@ bun add ppu-paddle-ocr
 ```
 
 > [!NOTE]
-> This project is developed and tested primarily with Bun.  
+> This project is developed and tested primarily with Bun.
 > Support for Node.js, Deno, or browser environments is **not guaranteed**.
 >
-> If you choose to use it outside of Bun and encounter any issues, feel free to report them.  
+> If you choose to use it outside of Bun and encounter any issues, feel free to report them.
 > I'm open to fixing bugs for other runtimes with community help.
 
 ## Usage
 
-#### Basic usage as singleton
+#### Basic Singleton Usage
+
+The service is designed as a singleton. Use `getInstance()` to get the service instance.
 
 ```ts
+import { PaddleOcrService } from "ppu-paddle-ocr";
+
 const service = await PaddleOcrService.getInstance({
   debugging: {
     debug: false,
     verbose: true,
   },
 });
+
+const result = await service.recognize("./assets/receipt.jpg");
+console.log(result.text);
+
+// It's important to destroy the service when you're done to release resources.
+await service.destroy();
 ```
 
-#### Basic usage using constructor
+#### Using Custom Models
+
+You can provide custom models via file paths, URLs, or `ArrayBuffer`s during initialization. If no models are provided, the default models will be fetched from GitHub.
 
 ```ts
-const service = new PaddleOcrService();
-await service.initialize();
-```
-
-#### Using custom models with createInstance
-
-```ts
-const customService = await PaddleOcrService.createInstance({
+const service = await PaddleOcrService.getInstance({
   model: {
     detection: "./models/custom-det.onnx",
-    recoginition: "./models/custom-rec.onnx",
+    recognition: "https://example.com/models/custom-rec.onnx",
+    charactersDictionary: customDictArrayBuffer,
   },
 });
 ```
 
-#### Changing models on an existing instance
+#### Changing Models and Dictionaries at Runtime
+
+You can dynamically change the models or dictionary on the singleton instance.
 
 ```ts
-await PaddleOcrService.changeModel({
-  model: {
-    detection: "./models/custom-det.onnx",
-    recoginition: "./models/custom-rec.onnx",
-  },
-});
+const service = await PaddleOcrService.getInstance();
+
+// Change the detection model
+await service.changeDetectionModel("./models/new-det-model.onnx");
+
+// Change the recognition model
+await service.changeRecognitionModel("./models/new-rec-model.onnx");
+
+// Change the dictionary
+await service.changeTextDictionary("./models/new-dict.txt");
 ```
 
 See: [Example usage](./examples)
 
 ## Models
 
-### `ppu-paddle-ocr` v1.x.x
+### `ppu-paddle-ocr` v2.x.x (Default)
 
-- detection: `en_PP-OCRv3_det_infer.onnx`
-- recogniton: `en_PP-OCRv3_rec_infer.onnx`
-- dictionary: `en_dict.txt` (97 class)
-
-### `ppu-paddle-ocr` v2.x.x
-
-- detection: `PP-OCRv5_mobile_det_infer.onnx`
-- recogniton: `en_PP-OCRv4_mobile_rec_infer.onnx`
-- dictionary: `en_dict.txt` (97 class)
+-   detection: `PP-OCRv5_mobile_det_infer.onnx`
+-   recogniton: `en_PP-OCRv4_mobile_rec_infer.onnx`
+-   dictionary: `en_dict.txt` (97 class)
 
 See: [Models](./src/models/)
 See also: [How to convert paddle ocr model to onnx](./examples/convert-onnx.ipynb)
 
 ## Configuration
 
-All options are grouped under the PaddleOptions interface:
+All options are grouped under the `PaddleOptions` interface:
 
 ```ts
 export interface PaddleOptions {
-  /** File paths to the required OCR model components. */
+  /** File paths, URLs, or buffers for the OCR model components. */
   model?: ModelPathOptions;
 
   /** Controls parameters for text detection. */
@@ -144,17 +150,17 @@ export interface PaddleOptions {
 
 #### `ModelPathOptions`
 
-Specifies filesystem paths to the OCR models and dictionary files.
+Specifies paths, URLs, or buffers for the OCR models and dictionary files.
 
-| Property               |   Type   |           Required            | Description                              |
-| :--------------------- | :------: | :---------------------------: | :--------------------------------------- |
-| `detection`            | `string` | **Yes** if not using defaults | Path to the text detection model file.   |
-| `recognition`          | `string` | **Yes** if not using defaults | Path to the text recognition model file. |
-| `charactersDictionary` | `string` | **Yes** if not using defaults | Path to the dictionary file.             |
+| Property               |         Type          |           Required            | Description                                                      |
+| :--------------------- | :-------------------: | :---------------------------: | :--------------------------------------------------------------- |
+| `detection`            | `string \| ArrayBuffer` | **No** (uses default model)   | Path, URL, or buffer for the text detection model.               |
+| `recognition`          | `string \| ArrayBuffer` | **No** (uses default model)   | Path, URL, or buffer for the text recognition model.             |
+| `charactersDictionary` | `string \| ArrayBuffer` | **No** (uses default dictionary) | Path, URL, buffer, or content of the dictionary file. |
 
-> [!NOTE]  
-> If you omit model, the library will attempt to use built‑in default models.
-> Don't forget to add space and blank at the end of the dictionary file.
+> [!NOTE]
+> If you omit model paths, the library will automatically fetch the default models from the official GitHub repository.
+> Don't forget to add a space and a blank line at the end of the dictionary file.
 
 #### `DetectionOptions`
 
@@ -186,90 +192,4 @@ Enable verbose logs and save intermediate images to help debug OCR pipelines.
 | ------------- | :-------: | :-----: | :------------------------------------------------------- |
 | `verbose`     | `boolean` | `false` | Turn on detailed console logs of each processing step.   |
 | `debug`       | `boolean` | `false` | Write intermediate image frames to disk.                 |
-| `debugFolder` | `string`  | `"out"` | Directory (relative to CWD) to save debug image outputs. |
-
-## Result
-
-```ts
-{
-  "text": "LOREM IPSUM DOLOR\nSIT AMET",
-  "lines": [
-    [
-      {
-        "text": "LOREM",
-        "box": {
-          "x": 183,
-          "y": 355,
-          "width": 200,
-          "height": 33
-        }
-      },
-      {
-        "text": "IPSUM DOLOR",
-        "box": {
-          "x": 285,
-          "y": 355,
-          "width": 250,
-          "height": 33
-        }
-      }
-    ],
-    [
-      {
-        "text": "SIT AMET",
-        "box": {
-          "x": 171,
-          "y": 453,
-          "width": 250,
-          "height": 33
-        }
-      }
-    ]
-  ]
-}
-```
-
-## Contributing
-
-Contributions are welcome! If you would like to contribute, please follow these steps:
-
-1. **Fork the Repository:** Create your own fork of the project.
-2. **Create a Feature Branch:** Use a descriptive branch name for your changes.
-3. **Implement Changes:** Make your modifications, add tests, and ensure everything passes.
-4. **Submit a Pull Request:** Open a pull request to discuss your changes and get feedback.
-
-### Running Tests
-
-This project uses Bun for testing. To run the tests locally, execute:
-
-```bash
-bun test
-```
-
-Ensure that all tests pass before submitting your pull request.
-
-## Scripts
-
-Recommended development environment is in linux-based environment.
-
-Library template: https://github.com/aquapi/lib-template
-
-All script sources and usage.
-
-### [Build](./scripts/build.ts)
-
-Emit `.js` and `.d.ts` files to [`lib`](./lib).
-
-### [Publish](./scripts/publish.ts)
-
-Move [`package.json`](./package.json), [`README.md`](./README.md) to [`lib`](./lib) and publish the package.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Support
-
-If you encounter any issues or have suggestions, please open an issue in the repository.
-
-Happy coding!
+| `debugFolder` | `string`  | `

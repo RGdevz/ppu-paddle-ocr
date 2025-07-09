@@ -1,12 +1,14 @@
+import { mkdirSync, writeFileSync } from "fs";
 import { PaddleOcrService } from "../src";
 // import { PaddleOcrService } from "ppu-paddle-ocr";
 
-const service = await PaddleOcrService.getInstance({
+const service = new PaddleOcrService({
   debugging: {
     debug: true,
     verbose: true,
   },
 });
+await service.initialize();
 
 const imagePath = "./assets/tilted.png";
 const imgFile = Bun.file(imagePath);
@@ -16,6 +18,10 @@ const startTime = Date.now();
 const result = await service.deskewImage(fileBuffer);
 const speed = Date.now() - startTime;
 
+const outDir = "./out";
+mkdirSync(outDir, { recursive: true });
+writeFileSync(`${outDir}/deskewed.png`, result.toBuffer("image/png"));
+
 service.destroy();
 
-console.log(`Operation completed in ${speed} ms, check out folder`);
+console.log(`Operation completed in ${speed} ms`);

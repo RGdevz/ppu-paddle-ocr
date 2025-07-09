@@ -1,17 +1,18 @@
 import { PaddleOcrService } from "../src";
 // import { PaddleOcrService } from "ppu-paddle-ocr";
 
-import dict from "../examples/custom-dict.txt" with { type: "file", embed: "true" };
+import dict from "../examples/custom-dict.txt" with { type: "file" };
 
-const service = await PaddleOcrService.getInstance({
+const service = new PaddleOcrService({
   debugging: {
     debug: true,
     verbose: true,
   },
   model: {
-    charactersDictionary: await Bun.file(dict).arrayBuffer()
+    charactersDictionary: await Bun.file(dict).arrayBuffer(),
   },
 });
+await service.initialize();
 
 const imagePath = "./assets/receipt.jpg";
 const imgFile = Bun.file(imagePath);

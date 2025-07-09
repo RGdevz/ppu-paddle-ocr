@@ -1,5 +1,6 @@
-import { readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import * as ort from "onnxruntime-node";
+import * as os from "os";
 import * as path from "path";
 import { Canvas, ImageProcessor } from "ppu-ocv";
 
@@ -25,127 +26,128 @@ export interface FlattenedPaddleOcrResult {
   confidence: number;
 }
 
+const GITHUB_BASE_URL =
+  "https://raw.githubusercontent.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr/main/models/";
+const CACHE_DIR = path.join(os.homedir(), ".cache", "ppu-paddle-ocr");
+
 /**
- * PaddleOcrService - Provides OCR functionality using PaddleOCR models
- *
- * This service can be used either as a singleton or as separate instances
- * depending on your application needs.
+ * PaddleOcrService - Provides OCR functionality using PaddleOCR models.
+ * To use this service, create an instance and call the `initialize()` method.
  */
 export class PaddleOcrService {
-  private static instance: PaddleOcrService | null = null;
   private options: PaddleOptions = DEFAULT_PADDLE_OPTIONS;
 
   private detectionSession: ort.InferenceSession | null = null;
   private recognitionSession: ort.InferenceSession | null = null;
 
   /**
-   * Create a new PaddleOcrService instance
-   * @param options Optional configuration options
+   * Creates an instance of PaddleOcrService.
+   * @param options - Configuration options for the service.
    */
-  constructor(options?: PaddleOptions) {
+  public constructor(options?: PaddleOptions) {
     this.options = merge({}, DEFAULT_PADDLE_OPTIONS, options);
   }
 
   /**
-   * Logs a message if verbose debugging is enabled
+   * Logs a message if verbose debugging is enabled.
    */
   private log(message: string): void {
     if (this.options.debugging?.verbose) {
-      console.log(`[DetectionService] ${message}`);
+      console.log(`[PaddleOcrService] ${message}`);
     }
   }
 
   /**
-   * Initialize the OCR service by loading models
-   * @param overrideOptions Optional parameters to override the constructor options
+   * Fetches a resource from a URL and caches it locally.
+   * If the resource is already in the cache, it loads it from there.
    */
-  public async initialize(
-    overrideOptions?: Partial<PaddleOptions>
-  ): Promise<void> {
-    try {
-      const effectiveOptions = merge({}, this.options, overrideOptions);
+  private async _fetchAndCache(url: string): Promise<ArrayBuffer> {
+    const fileName = path.basename(new URL(url).pathname);
+    const cachePath = path.join(CACHE_DIR, fileName);
 
-      const detectionModel = effectiveOptions.model?.detection;
-      if (!detectionModel) {
-        throw new Error(
-          "A detection model path (string) or ArrayBuffer must be provided in the options."
-        );
-      }
+    if (existsSync(cachePath)) {
+      this.log(`Loading cached resource from: ${cachePath}`);
+      return readFileSync(cachePath).buffer;
+    }
 
-      if (typeof detectionModel === "string") {
-        const resolvedDetectionPath = path.resolve(
-          process.cwd(),
-          detectionModel
-        );
-        this.log(`Loading Detection ONNX model from: ${resolvedDetectionPath}`);
-        const modelBuffer = readFileSync(resolvedDetectionPath).buffer;
-        this.detectionSession = await ort.InferenceSession.create(modelBuffer);
+    this.log(`Fetching resource from URL: ${url}`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch resource from ${url}`);
+    }
+    const buffer = await response.arrayBuffer();
+
+    this.log(`Caching resource to: ${cachePath}`);
+    if (!existsSync(CACHE_DIR)) {
+      mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    writeFileSync(cachePath, Buffer.from(buffer));
+
+    return buffer;
+  }
+
+  /**
+   * Loads a resource from a buffer, a file path, a URL, or a default URL.
+   */
+  private async _loadResource(
+    source: string | ArrayBuffer | undefined,
+    defaultUrl: string
+  ): Promise<ArrayBuffer> {
+    if (source instanceof ArrayBuffer) {
+      this.log("Loading resource from ArrayBuffer");
+      return source;
+    }
+
+    if (typeof source === "string") {
+      if (source.startsWith("http")) {
+        return this._fetchAndCache(source);
       } else {
-        this.log(`Loading Detection ONNX model from ArrayBuffer`);
-        this.detectionSession =
-          await ort.InferenceSession.create(detectionModel);
+        const resolvedPath = path.resolve(process.cwd(), source);
+        this.log(`Loading resource from path: ${resolvedPath}`);
+        return readFileSync(resolvedPath).buffer;
       }
+    }
 
+    return this._fetchAndCache(defaultUrl);
+  }
+
+  /**
+   * Initializes the OCR service by loading models and dictionary.
+   * This method must be called before any OCR operations.
+   */
+  public async initialize(): Promise<void> {
+    try {
+      this.log("Initializing PaddleOcrService...");
+
+      // Load detection model
+      const detModelBuffer = await this._loadResource(
+        this.options.model?.detection,
+        `${GITHUB_BASE_URL}PP-OCRv5_mobile_det_infer.onnx`
+      );
+      this.detectionSession = await ort.InferenceSession.create(detModelBuffer);
+      this.options.model!.detection = detModelBuffer;
       this.log(
         `Detection ONNX model loaded successfully\n\tinput: ${this.detectionSession.inputNames}\n\toutput: ${this.detectionSession.outputNames}`
       );
 
-      const recognitionModel = effectiveOptions.model?.recognition;
-      if (!recognitionModel) {
-        throw new Error(
-          "A recognition model path (string) or ArrayBuffer must be provided in the options."
-        );
-      }
-
-      if (typeof recognitionModel === "string") {
-        const resolvedRecognitionPath = path.resolve(
-          process.cwd(),
-          recognitionModel
-        );
-        this.log(
-          `Loading Recognition ONNX model from: ${resolvedRecognitionPath}`
-        );
-        const modelBuffer = readFileSync(resolvedRecognitionPath).buffer;
-        this.recognitionSession =
-          await ort.InferenceSession.create(modelBuffer);
-      } else {
-        this.log(`Loading Recognition ONNX model from ArrayBuffer`);
-        this.recognitionSession =
-          await ort.InferenceSession.create(recognitionModel);
-      }
-
+      // Load recognition model
+      const recModelBuffer = await this._loadResource(
+        this.options.model?.recognition,
+        `${GITHUB_BASE_URL}en_PP-OCRv4_mobile_rec_infer.onnx`
+      );
+      this.recognitionSession =
+        await ort.InferenceSession.create(recModelBuffer);
+      this.options.model!.recognition = recModelBuffer;
       this.log(
         `Recognition ONNX model loaded successfully\n\tinput: ${this.recognitionSession.inputNames}\n\toutput: ${this.recognitionSession.outputNames}`
       );
 
-      const dictionarySource = effectiveOptions.model?.charactersDictionary;
-      if (!dictionarySource) {
-        throw new Error(
-          "A character dictionary path (string) or ArrayBuffer must be provided in the options."
-        );
-      }
-
-      let dictionaryContent: string;
-      if (typeof dictionarySource === "string") {
-        const isLikelyContent = dictionarySource.includes("\n");
-
-        if (isLikelyContent) {
-          dictionaryContent = dictionarySource;
-        } else {
-          const resolvedCharactersPath = path.resolve(
-            process.cwd(),
-            dictionarySource
-          );
-          this.log(
-            `Loading character dictionary from: ${resolvedCharactersPath}`
-          );
-          dictionaryContent = readFileSync(resolvedCharactersPath, "utf-8");
-        }
-      } else {
-        this.log(`Loading character dictionary from ArrayBuffer`);
-        dictionaryContent = Buffer.from(dictionarySource).toString("utf-8");
-      }
-
+      // Load character dictionary
+      const dictBuffer = await this._loadResource(
+        this.options.model?.charactersDictionary,
+        `${GITHUB_BASE_URL}en_dict.txt`
+      );
+      const dictionaryContent = Buffer.from(dictBuffer).toString("utf-8");
       const charactersDictionary = dictionaryContent.split("\n");
 
       if (charactersDictionary.length === 0) {
@@ -154,6 +156,7 @@ export class PaddleOcrService {
         );
       }
 
+      this.options.model!.charactersDictionary = dictBuffer;
       this.options.recognition!.charactersDictionary = charactersDictionary;
       this.log(
         `Character dictionary loaded with ${charactersDictionary.length} entries.`
@@ -165,63 +168,75 @@ export class PaddleOcrService {
   }
 
   /**
-   * Get or create the singleton instance of PaddleOcrService
-   * @param options Configuration options for the service
-   * @returns A promise resolving to the singleton instance
-   * @example
-   * const service = await PaddleOcrService.getInstance({
-   *   verbose: true,
-   * });
-   */
-  public static async getInstance(
-    options?: PaddleOptions
-  ): Promise<PaddleOcrService> {
-    if (!PaddleOcrService.instance) {
-      PaddleOcrService.instance = new PaddleOcrService(options);
-      await PaddleOcrService.instance.initialize();
-    } else if (options) {
-      await PaddleOcrService.instance.initialize(options);
-    }
-    return PaddleOcrService.instance;
-  }
-
-  /**
-   * Check if the service is initialized with models loaded
+   * Checks if the service has been initialized with models loaded.
    */
   public isInitialized(): boolean {
     return this.detectionSession !== null && this.recognitionSession !== null;
   }
 
   /**
-   * Change models in the singleton instance
-   * @param options New configuration options
+   * Changes the detection model for the current instance.
+   * @param model - The new detection model as a path, URL, or ArrayBuffer.
    */
-  public static async changeModel(
-    options: Partial<PaddleOptions>
-  ): Promise<PaddleOcrService> {
-    if (!PaddleOcrService.instance) {
-      PaddleOcrService.instance = new PaddleOcrService(options);
-      await PaddleOcrService.instance.initialize();
-    } else {
-      await PaddleOcrService.instance.destroy();
-      await PaddleOcrService.instance.initialize(options);
-    }
+  public async changeDetectionModel(
+    model: ArrayBuffer | string
+  ): Promise<void> {
+    this.log("Changing detection model...");
+    const modelBuffer = await this._loadResource(
+      model,
+      `${GITHUB_BASE_URL}PP-OCRv5_mobile_det_infer.onnx`
+    );
 
-    return PaddleOcrService.instance;
+    await this.detectionSession?.release();
+    this.detectionSession = await ort.InferenceSession.create(modelBuffer);
+    this.options.model!.detection = modelBuffer;
+    this.log("Detection model changed successfully.");
   }
 
   /**
-   * Create a new instance instead of using the singleton
-   * This is useful when you need multiple instances with different models
-   * @param options Configuration options for this specific instance
+   * Changes the recognition model for the current instance.
+   * @param model - The new recognition model as a path, URL, or ArrayBuffer.
    */
-  public static async createInstance(
-    options?: PaddleOptions
-  ): Promise<PaddleOcrService> {
-    const instance = new PaddleOcrService(options);
-    await instance.initialize();
+  public async changeRecognitionModel(
+    model: ArrayBuffer | string
+  ): Promise<void> {
+    this.log("Changing recognition model...");
+    const modelBuffer = await this._loadResource(
+      model,
+      `${GITHUB_BASE_URL}en_PP-OCRv4_mobile_rec_infer.onnx`
+    );
 
-    return instance;
+    await this.recognitionSession?.release();
+    this.recognitionSession = await ort.InferenceSession.create(modelBuffer);
+    this.options.model!.recognition = modelBuffer;
+    this.log("Recognition model changed successfully.");
+  }
+
+  /**
+   * Changes the text dictionary for the current instance.
+   * @param dictionary - The new dictionary as a path, URL, ArrayBuffer, or string content.
+   */
+  public async changeTextDictionary(
+    dictionary: ArrayBuffer | string
+  ): Promise<void> {
+    this.log("Changing text dictionary...");
+    const dictBuffer = await this._loadResource(
+      dictionary,
+      `${GITHUB_BASE_URL}en_dict.txt`
+    );
+
+    const dictionaryContent = Buffer.from(dictBuffer).toString("utf-8");
+    const charactersDictionary = dictionaryContent.split("\n");
+
+    if (charactersDictionary.length === 0) {
+      throw new Error("Character dictionary is empty or could not be loaded.");
+    }
+
+    this.options.model!.charactersDictionary = dictBuffer;
+    this.options.recognition!.charactersDictionary = charactersDictionary;
+    this.log(
+      `Character dictionary changed successfully with ${charactersDictionary.length} entries.`
+    );
   }
 
   /**
@@ -260,6 +275,11 @@ export class PaddleOcrService {
     image: ArrayBuffer | Canvas,
     options?: { flatten?: boolean }
   ): Promise<PaddleOcrResult | FlattenedPaddleOcrResult> {
+    if (!this.isInitialized()) {
+      throw new Error(
+        "PaddleOcrService is not initialized. Call initialize() first."
+      );
+    }
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(
@@ -356,6 +376,11 @@ export class PaddleOcrService {
    * @return A promise that resolves deskewed image as Canvas
    */
   public async deskewImage(image: ArrayBuffer | Canvas): Promise<Canvas> {
+    if (!this.isInitialized()) {
+      throw new Error(
+        "PaddleOcrService is not initialized. Call initialize() first."
+      );
+    }
     await ImageProcessor.initRuntime();
 
     const detector = new DetectionService(
@@ -375,6 +400,8 @@ export class PaddleOcrService {
   public async destroy(): Promise<void> {
     await this.detectionSession?.release();
     await this.recognitionSession?.release();
+    this.detectionSession = null;
+    this.recognitionSession = null;
   }
 }
 

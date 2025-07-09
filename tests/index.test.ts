@@ -1,16 +1,9 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  test,
-} from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PaddleOcrService } from "../src/processor/paddle-ocr.service";
 
-import dict from "../src/models/en_dict.txt" with { type: "file", embed: "true" };
-import recModel from "../src/models/en_PP-OCRv4_mobile_rec_infer.onnx" with { type: "file", embed: "true" };
-import detModel from "../src/models/PP-OCRv5_mobile_det_infer.onnx" with { type: "file", embed: "true" };
+import dict from "../models/en_dict.txt" with { type: "file" };
+import recModel from "../models/en_PP-OCRv4_mobile_rec_infer.onnx" with { type: "file" };
+import detModel from "../models/PP-OCRv5_mobile_det_infer.onnx" with { type: "file" };
 
 const imgFile = Bun.file("./assets/receipt.jpg");
 const imageBuffer = await imgFile.arrayBuffer();
@@ -25,21 +18,32 @@ describe("PaddleOcrService Initialization", () => {
     }
   });
 
-  test("should initialize and recognize using explicit file paths", async () => {
+  test("should initialize with default models from GitHub", async () => {
+    // This test will be slow as it downloads models
     service = new PaddleOcrService();
-    await service.initialize({
+    await service.initialize();
+    expect(service.isInitialized()).toBe(true);
+
+    const result = await service.recognize(imageBuffer);
+    expect(result.text).not.toBeEmpty();
+    expect(result.confidence).toBeGreaterThan(0.8);
+  }, 30000); // Increase timeout for download
+
+  test("should initialize and recognize using explicit file paths", async () => {
+    service = new PaddleOcrService({
       model: {
         detection: detModel,
         recognition: recModel,
         charactersDictionary: dict,
       },
     });
+    await service.initialize();
 
     expect(service.isInitialized()).toBe(true);
 
     const result = await service.recognize(imageBuffer);
     expect(result.text).not.toBeEmpty();
-    expect(result.confidence).toBeGreaterThan(0.8); 
+    expect(result.confidence).toBeGreaterThan(0.8);
   });
 
   test("should initialize and recognize from ArrayBuffer inputs", async () => {
@@ -51,14 +55,14 @@ describe("PaddleOcrService Initialization", () => {
     expect(recBuffer.byteLength).toBeGreaterThan(0);
     expect(dictBuffer.byteLength).toBeGreaterThan(0);
 
-    service = new PaddleOcrService();
-    await service.initialize({
+    service = new PaddleOcrService({
       model: {
         detection: detBuffer,
         recognition: recBuffer,
         charactersDictionary: dictBuffer,
       },
     });
+    await service.initialize();
 
     expect(service.isInitialized()).toBe(true);
 
@@ -68,14 +72,21 @@ describe("PaddleOcrService Initialization", () => {
   });
 });
 
-describe("PaddleOcrService.recognize() (using default singleton)", () => {
+describe("PaddleOcrService.recognize()", () => {
   let service: PaddleOcrService;
 
-  beforeAll(async () => {
-    service = await PaddleOcrService.getInstance();
+  beforeEach(async () => {
+    service = new PaddleOcrService({
+      model: {
+        detection: detModel,
+        recognition: recModel,
+        charactersDictionary: dict,
+      },
+    });
+    await service.initialize();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await service.destroy();
   });
 
@@ -86,13 +97,13 @@ describe("PaddleOcrService.recognize() (using default singleton)", () => {
     expect(result).toHaveProperty("text");
     expect(result).toHaveProperty("lines");
     expect(result).toHaveProperty("confidence");
-    expect(result).not.toHaveProperty("results"); 
+    expect(result).not.toHaveProperty("results");
 
     expect(result.text).toBeString();
     expect(result.confidence).toBeNumber();
     expect(result.confidence).toBeGreaterThan(0);
     expect(result.lines).toBeArray();
-    expect(result.lines.length).toBeGreaterThan(0); 
+    expect(result.lines.length).toBeGreaterThan(0);
 
     const firstLine = result.lines[0];
     expect(firstLine).toBeArray();
@@ -113,9 +124,9 @@ describe("PaddleOcrService.recognize() (using default singleton)", () => {
 
     expect(result).toBeObject();
     expect(result).toHaveProperty("text");
-    expect(result).toHaveProperty("results"); 
+    expect(result).toHaveProperty("results");
     expect(result).toHaveProperty("confidence");
-    expect(result).not.toHaveProperty("lines"); 
+    expect(result).not.toHaveProperty("lines");
 
     expect(result.text).toBeString();
     expect(result.confidence).toBeNumber();
