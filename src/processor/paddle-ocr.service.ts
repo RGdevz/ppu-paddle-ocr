@@ -67,7 +67,8 @@ export class PaddleOcrService {
 
     if (existsSync(cachePath)) {
       this.log(`Loading cached resource from: ${cachePath}`);
-      return readFileSync(cachePath).buffer;
+      const buf = readFileSync(cachePath);
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     }
 
     console.log(
@@ -140,7 +141,8 @@ export class PaddleOcrService {
       } else {
         const resolvedPath = path.resolve(process.cwd(), source);
         this.log(`Loading resource from path: ${resolvedPath}`);
-        return readFileSync(resolvedPath).buffer;
+        const buf = readFileSync(resolvedPath);
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
       }
     }
 
